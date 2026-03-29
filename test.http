@@ -1,0 +1,36 @@
+### Testar autenticação
+GET https://api.abacatepay.com/v1/billing
+Authorization: Bearer abc_dev_LkfcfGj3gmh5XN0CEaX6ZwPx
+X-API-Key: abc_dev_LkfcfGj3gmh5XN0CEaX6ZwPx
+Accept: application/json
+
+### Criar cobrança
+POST https://api.abacatepay.com/v1/billing/create
+Authorization: Bearer abc_dev_LkfcfGj3gmh5XN0CEaX6ZwPx
+X-API-Key: abc_dev_LkfcfGj3gmh5XN0CEaX6ZwPx
+Content-Type: application/json
+Accept: application/json
+
+{
+  "frequency": "ONE_TIME",
+  "methods": ["PIX"],
+  "products": [
+    {
+      "externalId": "plan_starter",
+      "name": "Assinatura Starter",
+      "description": "Assinatura Starter",
+      "price": 2990,
+      "quantity": 1
+    }
+  ],
+  "returnUrl": "http://127.0.0.1:5000/planos/retorno?checkout=1",
+  "completionUrl": "http://127.0.0.1:5000/planos/retorno?checkout=1",
+  "externalId": "checkout_1",
+  "customer": {
+    "name": "rafael",
+    "email": "raafaellacerdaa@gmail.com",
+    "cellphone": "+5511975097234",
+    "externalId": "user_2",
+    "taxId":"4222936685"
+  }
+}

@@ -1,0 +1,351 @@
+﻿{% extends "base.html" %}
+{% block title %}Mensagens | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel message-hub">
+  <div class="panel-head">
+    <h1>Mensagens</h1>
+  </div>
+  <p class="message-subtitle">Organize templates e dispare mensagens em lote no mesmo fluxo.</p>
+  <p class="meta">
+    {% if bulk_limit %}Limite por envio: {{ bulk_limit }} destinatarios.{% else %}Limite por envio: ilimitado.{% endif %}
+    {% if template_limit %} Templates: ate {{ template_limit }}.{% else %} Templates: ilimitados.{% endif %}
+  </p>
+
+  <div class="message-tabs" role="tablist" aria-label="Abas de mensagens">
+    <button type="button" class="tab-button active" role="tab" aria-selected="true" aria-controls="tab-send" id="tab-trigger-send" data-tab-target="tab-send">
+      Envio em lote
+    </button>
+    <button type="button" class="tab-button" role="tab" aria-selected="false" aria-controls="tab-templates" id="tab-trigger-templates" data-tab-target="tab-templates">
+      Templates
+    </button>
+  </div>
+
+  <section id="tab-send" class="tab-pane active" role="tabpanel" aria-labelledby="tab-trigger-send">
+    <div class="pane-head">
+      <h2>Registrar envio</h2>
+      <span class="pane-badge">
+        {% if whatsapp_is_pywhatkit %}
+          envio ativo
+        {% else %}
+          modo simulado
+        {% endif %}
+      </span>
+    </div>
+    {% if whatsapp_is_pywhatkit %}
+      <p class="meta">Requer WhatsApp Web conectado no navegador do servidor para concluir o envio.</p>
+      {% if not whatsapp_session_connected %}
+        <article class="flash flash-error">
+          {{ whatsapp_session_message }}
+          <a href="{{ url_for('main.settings') }}">Abrir configuracoes</a>
+        </article>
+      {% endif %}
+    {% endif %}
+    <p class="meta">O envio usa automaticamente o telefone cadastrado de cada fornecedor selecionado.</p>
+    <form method="post" class="form-grid" id="send-messages-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="send_messages">
+      <label class="full">
+        Template
+        <select name="template_id">
+          <option value="">-- sem template --</option>
+          {% for item in templates %}
+            <option value="{{ item.id }}">{{ item.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="full">
+        Produto (contexto para {produto})
+        <input name="produto" placeholder="Ex.: parafuso inox">
+      </label>
+      <label class="full">
+        Mensagem customizada (opcional)
+        <small class="meta">Se voce preencher este campo, a mensagem do template sera substituida por este texto.</small>
+        <textarea name="custom_body" rows="5" placeholder="Se preencher, este texto sera enviado para os fornecedores selecionados."></textarea>
+      </label>
+      <fieldset class="full supplier-picker">
+        <legend>Fornecedores</legend>
+        {% if suppliers %}
+          <label class="check-all">
+            <input type="checkbox" id="check-all">
+            <span class="check-ui" aria-hidden="true"></span>
+            <span>Selecionar todos ({{ suppliers|length }})</span>
+          </label>
+          <div class="supplier-list">
+            {% for supplier in suppliers %}
+              <label class="supplier-item">
+                <input
+                  type="checkbox"
+                  name="supplier_ids"
+                  value="{{ supplier.id }}"
+                  data-supplier-name="{{ supplier.name }}"
+                  data-supplier-phone="{{ supplier.phone or '' }}"
+                  data-supplier-email="{{ supplier.email or '' }}"
+                >
+                <span class="check-ui" aria-hidden="true"></span>
+                <span class="supplier-meta">
+                  <strong>{{ supplier.name }}</strong>
+                  <small>
+                    {% if supplier.company %}{{ supplier.company }}{% endif %}
+                    {% if supplier.phone %}
+                      {% if supplier.company %} Ã‚Â· {% endif %}{{ supplier.phone }}
+                    {% elif supplier.email %}
+                      {% if supplier.company %} Ã‚Â· {% endif %}{{ supplier.email }}
+                    {% endif %}
+                  </small>
+                </span>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="supplier-empty">
+            <p>Cadastre fornecedores para enviar mensagens.</p>
+            <a href="{{ url_for('main.create_supplier') }}">Cadastrar fornecedor</a>
+          </div>
+        {% endif %}
+      </fieldset>
+      <div class="full">
+        <button class="button" type="submit">Enviar mensagens</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="tab-templates" class="tab-pane" role="tabpanel" aria-labelledby="tab-trigger-templates">
+    <div class="pane-head">
+      <h2>Novo template</h2>
+    </div>
+    {% if template_limit %}
+      <p class="meta">Seu plano permite ate {{ template_limit }} templates.</p>
+    {% endif %}
+    <p>Use placeholders: <code>{nome}</code>, <code>{empresa}</code>, <code>{produto}</code>.</p>
+    <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="create_template">
+      <label class="full">
+        Nome do template
+        <input name="template_name" required>
+      </label>
+      <label class="full">
+        Conteudo
+        <textarea name="template_body" rows="8" required>Ola {nome}, estou buscando fornecedores para {produto}. Poderia me enviar mais informacoes?</textarea>
+      </label>
+      <div class="full">
+        <button class="button" type="submit">Salvar template</button>
+      </div>
+    </form>
+
+    <hr>
+
+    <h3>Templates salvos</h3>
+    {% if templates %}
+      <ul class="template-list">
+        {% for item in templates %}
+          <li>
+            <div class="template-head">
+              <strong>{{ item.name }}</strong>
+              <form method="post" action="{{ url_for('main.delete_template', template_id=item.id) }}" data-confirm-message="Excluir este template?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="danger button-sm">Excluir</button>
+              </form>
+            </div>
+            <pre>{{ item.body }}</pre>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>Nenhum template criado.</p>
+    {% endif %}
+  </section>
+</section>
+
+<div id="send-progress-popup" class="send-progress-popup" hidden>
+  <div id="send-progress-panel" class="send-progress-panel" role="status" aria-live="polite">
+    <div class="send-progress-head">
+      <strong>Envio em andamento</strong>
+      <button type="button" class="button-sm button-muted" id="send-progress-minimize">Minimizar</button>
+    </div>
+    <p class="send-progress-text" id="send-progress-text">Preparando envio...</p>
+    <div class="send-progress-list-wrap">
+      <p class="send-progress-label">Destinatarios selecionados</p>
+      <ul id="send-progress-list"></ul>
+    </div>
+  </div>
+  <button type="button" id="send-progress-compact" class="send-progress-compact" hidden>
+    <span id="send-progress-compact-text">Envio em andamento</span>
+    <span class="send-progress-compact-action">Expandir</span>
+  </button>
+</div>
+
+<script>
+  const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
+  const tabPanes = Array.from(document.querySelectorAll(".tab-pane"));
+
+  function activateTab(targetId) {
+    tabButtons.forEach((button) => {
+      const isActive = button.dataset.tabTarget === targetId;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+
+    tabPanes.forEach((pane) => {
+      pane.classList.toggle("active", pane.id === targetId);
+    });
+  }
+
+  tabButtons.forEach((button) => {
+    button.addEventListener("click", () => activateTab(button.dataset.tabTarget));
+  });
+
+  if (window.location.hash === "#tab-templates") {
+    activateTab("tab-templates");
+  } else if (window.location.hash === "#tab-send") {
+    activateTab("tab-send");
+  }
+
+  const checkAll = document.getElementById("check-all");
+  if (checkAll) {
+    checkAll.addEventListener("change", () => {
+      document.querySelectorAll('input[name="supplier_ids"]').forEach((el) => {
+        el.checked = checkAll.checked;
+      });
+    });
+  }
+
+  const sendForm = document.getElementById("send-messages-form");
+  const popup = document.getElementById("send-progress-popup");
+  const popupPanel = document.getElementById("send-progress-panel");
+  const popupCompact = document.getElementById("send-progress-compact");
+  const popupCompactText = document.getElementById("send-progress-compact-text");
+  const popupMinimize = document.getElementById("send-progress-minimize");
+  const popupText = document.getElementById("send-progress-text");
+  const popupList = document.getElementById("send-progress-list");
+
+  if (sendForm && popup && popupPanel && popupCompact && popupCompactText && popupMinimize && popupText && popupList) {
+    let isSending = false;
+
+    const hidePopup = () => {
+      popup.hidden = true;
+      popupCompact.hidden = true;
+      popup.classList.remove("is-minimized");
+      popupPanel.classList.remove("is-finished", "is-error");
+      popupList.innerHTML = "";
+    };
+
+    const showExpandedPopup = () => {
+      popup.hidden = false;
+      popup.classList.remove("is-minimized");
+      popupCompact.hidden = true;
+    };
+
+    const showMinimizedPopup = () => {
+      popup.hidden = false;
+      popup.classList.add("is-minimized");
+      popupCompact.hidden = false;
+    };
+
+    const setPopupResult = (message, isError) => {
+      popupText.textContent = message;
+      popupPanel.classList.toggle("is-error", Boolean(isError));
+      popupPanel.classList.toggle("is-finished", !isError);
+      popupCompactText.textContent = message;
+    };
+
+    popupMinimize.addEventListener("click", () => {
+      if (!isSending) {
+        return;
+      }
+      showMinimizedPopup();
+    });
+
+    popupCompact.addEventListener("click", () => {
+      showExpandedPopup();
+    });
+
+    sendForm.addEventListener("submit", async (event) => {
+      const actionInput = sendForm.querySelector('input[name="action"]');
+      if (!actionInput || actionInput.value !== "send_messages") {
+        return;
+      }
+
+      event.preventDefault();
+      if (isSending) {
+        return;
+      }
+
+      const selected = Array.from(sendForm.querySelectorAll('input[name="supplier_ids"]:checked'));
+      if (selected.length === 0) {
+        sendForm.submit();
+        return;
+      }
+
+      isSending = true;
+      popupPanel.classList.remove("is-finished", "is-error");
+      popupText.textContent = "Enviando mensagens...";
+      popupCompactText.textContent = `Enviando para ${selected.length} contato(s)`;
+      popupList.innerHTML = "";
+
+      selected.forEach((input) => {
+        const item = document.createElement("li");
+        const name = input.dataset.supplierName || "Fornecedor";
+        const phone = input.dataset.supplierPhone || "";
+        const email = input.dataset.supplierEmail || "";
+        item.textContent = `${name} - ${phone || email || "sem contato visivel"}`;
+        popupList.appendChild(item);
+      });
+
+      showExpandedPopup();
+
+      const submitButton = sendForm.querySelector('button[type="submit"]');
+      if (submitButton instanceof HTMLButtonElement) {
+        submitButton.disabled = true;
+      }
+
+      try {
+        const formData = new FormData(sendForm);
+        const submitUrl = sendForm.getAttribute("action") || window.location.pathname;
+        const response = await fetch(submitUrl, {
+          method: "POST",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+          },
+          body: formData,
+          credentials: "same-origin",
+        });
+
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch (_jsonError) {
+          payload = null;
+        }
+
+        const ok = response.ok && payload && payload.ok;
+        const message = payload && payload.message ? payload.message : "Envio finalizado.";
+        setPopupResult(message, !ok);
+
+        if (payload && payload.redirect_url) {
+          setTimeout(() => {
+            window.location.href = payload.redirect_url;
+          }, 1200);
+          return;
+        }
+
+        setTimeout(() => {
+          hidePopup();
+          window.location.reload();
+        }, 1600);
+      } catch (_error) {
+        setPopupResult("Falha ao enviar mensagens. Tente novamente.", true);
+        setTimeout(() => {
+          hidePopup();
+        }, 2200);
+      } finally {
+        isSending = false;
+        if (submitButton instanceof HTMLButtonElement) {
+          submitButton.disabled = false;
+        }
+      }
+    });
+  }
+</script>
+{% endblock %}
+

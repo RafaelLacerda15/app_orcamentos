@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Importacao | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+  <h1>Importar contatos</h1>
+  <p>Envie um arquivo CSV ou XLSX. O sistema identifica automaticamente as colunas de nome, empresa, telefone, email e observacoes.</p>
+
+  <form method="post" enctype="multipart/form-data" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="full upload-field" for="import-file">
+      <input id="import-file" class="upload-input" type="file" name="file" accept=".csv,.xlsx" required>
+      <span class="upload-title">Arquivo para envio</span>
+      <span class="upload-hint">CSV ou XLSX, ate 5MB.</span>
+      <span class="upload-row">
+        <span class="upload-trigger">Escolher arquivo</span>
+        <span id="upload-filename" class="upload-filename">Nenhum arquivo selecionado</span>
+      </span>
+    </label>
+    <div class="full">
+      <button class="button" type="submit">Importar</button>
+    </div>
+  </form>
+
+  {% if result %}
+    <article class="import-result">
+      <h2>Resumo</h2>
+      <p>Novos: {{ result.imported }} | Ignorados: {{ result.skipped }}</p>
+      {% if result.errors %}
+        <h3>Inconsistencias</h3>
+        <ul>
+        {% for error in result.errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    </article>
+  {% endif %}
+</section>
+
+<script>
+  const fileInput = document.getElementById("import-file");
+  const fileLabel = document.getElementById("upload-filename");
+  if (fileInput && fileLabel) {
+    fileInput.addEventListener("change", () => {
+      const selected = fileInput.files && fileInput.files.length ? fileInput.files[0].name : "Nenhum arquivo selecionado";
+      fileLabel.textContent = selected;
+    });
+  }
+</script>
+{% endblock %}
+

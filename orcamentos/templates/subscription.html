@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Assinatura | App Orcamentos{% endblock %}
+{% block content %}
+<section class="grid billing-plans-grid">
+  {% for plan in plans %}
+    <article class="panel billing-plan-card">
+      <div class="panel-head">
+        <h2>{{ plan.display_name }}</h2>
+        {% if plan.is_current %}
+          <span class="status-pill status-connected">Plano Atual</span>
+        {% else %}
+          <span class="status-pill status-connected">Mensal</span>
+        {% endif %}
+      </div>
+      <p class="billing-price">{{ plan.amount_label }} / mes</p>
+      {% if payment_test_mode %}
+        <p class="meta">
+          Fluxo atual (teste): cria o pedido pendente e o admin pode confirmar manualmente.
+        </p>
+      {% endif %}
+      <ul>
+        {% for feature_item in plan.feature_items %}
+          <li>{{ feature_item }}</li>
+        {% endfor %}
+      </ul>
+      <form method="post" action="{{ url_for('main.billing_checkout_start', plan_key=plan.key) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" {% if has_pending_order or plan.is_current %}disabled{% endif %}>
+          {% if plan.is_current %}
+          Plano Atual
+          {% else %}
+          Comprar {{ plan.name }}
+          {% endif %}
+        </button>
+      </form>
+      </form>
+    </article>
+  {% endfor %}
+</section>
+{% if has_pending_order %}
+  <section class="panel billing-panel">
+    <p class="meta">Existe um pedido pendente. Cancele no historico abaixo, se necessario.</p>
+  </section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">
+    <h3>Historico de pedidos</h3>
+  </div>
+
+  {% if orders %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Plano</th>
+            <th>Valor</th>
+            <th>Status</th>
+            <th>Criado em</th>
+            <th>Periodo</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in orders %}
+            <tr>
+              <td>{{ order.id }}</td>
+              <td>{{ order.plan_name }}</td>
+              <td>{{ format_currency_from_cents(order.amount_cents, order.currency) }}</td>
+              <td>{{ order.status }}</td>
+              <td>{{ order.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+              <td>
+                {% if order.period_start_at and order.period_end_at %}
+                  {{ order.period_start_at.strftime("%d/%m/%Y") }} ate {{ order.period_end_at.strftime("%d/%m/%Y") }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td class="actions">
+                {% if order.status == "pending" %}
+                  <form method="post" action="{{ url_for('main.cancel_subscription_order', order_id=order.id) }}" data-confirm-message="Cancelar este pedido pendente?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="button-muted button-sm">Cancelar</button>
+                  </form>
+                  <span class="meta">Aguardando confirmacao do pagamento.</span>
+                {% else %}
+                  <span class="meta">Sem acao</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>Nenhum pedido de assinatura registrado.</p>
+  {% endif %}
+</section>
+
+<script>
+  (() => {
+    const hasPendingOrder = {{ has_pending_order|tojson }};
+    if (!hasPendingOrder) {
+      return;
+    }
+
+    let refreshScheduled = false;
+
+    async function checkSubscriptionStatus() {
+      if (refreshScheduled) {
+        return;
+      }
+
+      try {
+        const response = await fetch("{{ url_for('main.subscription_status') }}", {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+        });
+        if (!response.ok) {
+          return;
+        }
+
+        const payload = await response.json();
+        if (payload.subscription_active || payload.pending_orders_count === 0) {
+          refreshScheduled = true;
+          window.location.reload();
+        }
+      } catch (error) {
+        // Ignora falhas temporarias de rede/polling.
+      }
+    }
+
+    window.setInterval(checkSubscriptionStatus, 4000);
+  })();
+</script>
+{% endblock %}
+

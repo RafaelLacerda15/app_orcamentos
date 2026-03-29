@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>{% block title %}App Orcamentos{% endblock %}</title>
+  <style>
+    html,
+    body {
+      margin: 0 !important;
+      padding: 0 !important
+    }
+  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css', v='20260328-1') }}">
+</head>
+
+<body class="{% if not current_user %}auth-shell{% endif %}">
+
+  <div class="ambient" aria-hidden="true">
+    <span class="orb orb-1"></span>
+    <span class="orb orb-2"></span>
+    <span class="orb orb-3"></span>
+  </div>
+
+  {% if current_user %}
+  {# ══════════════ SIDEBAR ══════════════ #}
+  <aside class="sidebar" id="sidebar" aria-label="Navegação principal">
+
+    <div class="sidebar-brand">
+      <span class="sidebar-dot"></span>
+      <strong class="sidebar-brand-name">App Orçamentos</strong>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Menu principal">
+      {% if current_user.is_admin %}
+      <a class="sidebar-link {% if request.path == url_for('main.admin_dashboard') %}is-active{% endif %}"
+        href="{{ url_for('main.admin_dashboard') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="2" width="7" height="7" rx="1.5" />
+          <rect x="11" y="2" width="7" height="7" rx="1.5" />
+          <rect x="2" y="11" width="7" height="7" rx="1.5" />
+          <rect x="11" y="11" width="7" height="7" rx="1.5" />
+        </svg>
+        <span>Dashboard</span>
+      </a>
+      <a class="sidebar-link {% if request.path == url_for('main.admin_users') %}is-active{% endif %}"
+        href="{{ url_for('main.admin_users') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="8" cy="6" r="3" />
+          <path d="M2 17c0-3.3 2.7-6 6-6" />
+          <circle cx="15" cy="11" r="2.5" />
+          <path d="M11.5 18c0-2 1.6-3.5 3.5-3.5s3.5 1.5 3.5 3.5" />
+        </svg>
+        <span>Usuários</span>
+      </a>
+      <a class="sidebar-link {% if request.path == url_for('main.admin_database') %}is-active{% endif %}"
+        href="{{ url_for('main.admin_database') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <ellipse cx="10" cy="5" rx="7" ry="2.5" />
+          <path d="M3 5v4c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V5" />
+          <path d="M3 9v4c0 1.4 3.1 2.5 7 2.5s7-1.1 7-2.5V9" />
+        </svg>
+        <span>Banco de dados</span>
+      </a>
+      {% else %}
+      <a class="sidebar-link {% if request.path == url_for('main.dashboard') %}is-active{% endif %}"
+        href="{{ url_for('main.dashboard') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="2" width="7" height="7" rx="1.5" />
+          <rect x="11" y="2" width="7" height="7" rx="1.5" />
+          <rect x="2" y="11" width="7" height="7" rx="1.5" />
+          <rect x="11" y="11" width="7" height="7" rx="1.5" />
+        </svg>
+        <span>Dashboard</span>
+      </a>
+      <a class="sidebar-link {% if request.path.startswith('/fornecedores') %}is-active{% endif %}"
+        href="{{ url_for('main.suppliers') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 7l7-4 7 4v9a1 1 0 01-1 1H4a1 1 0 01-1-1V7z" />
+          <path d="M8 18V11h4v7" />
+        </svg>
+        <span>Fornecedores</span>
+      </a>
+      <a class="sidebar-link {% if request.path.startswith('/mensagens') %}is-active{% endif %}"
+        href="{{ url_for('main.messages') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M2 4a2 2 0 012-2h12a2 2 0 012 2v9a2 2 0 01-2 2H6l-4 3V4z" />
+        </svg>
+        <span>Mensagens</span>
+      </a>
+      {% endif %}
+    </nav>
+
+    <div class="sidebar-divider" aria-hidden="true"></div>
+
+    {% if current_user and not current_user.is_admin %}
+    <nav class="sidebar-nav" aria-label="Conta">
+      <a class="sidebar-link {% if request.path.startswith('/assinatura') %}is-active{% endif %}"
+        href="{{ url_for('main.subscription') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="5" width="16" height="11" rx="2" />
+          <path d="M2 9h16" />
+        </svg>
+        <span>Assinatura</span>
+      </a>
+      {% if member_can_import_contacts %}
+      <a class="sidebar-link {% if request.path.startswith('/importar') %}is-active{% endif %}"
+        href="{{ url_for('main.import_contacts') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10 3v10M6 9l4 4 4-4" />
+          <path d="M4 16h12" />
+        </svg>
+        <span>Importar</span>
+      </a>
+      {% endif %}
+      <a class="sidebar-link {% if request.path.startswith('/historico') %}is-active{% endif %}"
+        href="{{ url_for('main.history') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="10" cy="10" r="8" />
+          <path d="M10 6v4l3 2" />
+        </svg>
+        <span>Histórico</span>
+      </a>
+      {% if member_can_whatsapp_session %}
+      <a class="sidebar-link {% if request.path.startswith('/configuracoes') %}is-active{% endif %}"
+        href="{{ url_for('main.settings') }}">
+        <svg class="sidebar-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="10" cy="10" r="2.5" />
+          <path
+            d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42" />
+        </svg>
+        <span>Configurações</span>
+      </a>
+      {% endif %}
+    </nav>
+    <div class="sidebar-divider" aria-hidden="true"></div>
+    {% endif %}
+
+    <div class="sidebar-footer">
+      <div class="sidebar-avatar" aria-hidden="true">{{ current_user.username[0]|upper }}</div>
+      <div class="sidebar-user-info">
+        <span class="sidebar-username">{{ current_user.username }}</span>
+        <span class="sidebar-user-role">{% if current_user.is_admin %}Admin{% else %}{{ member_plan_label or "Sem plano"
+          }}{% endif %}</span>
+      </div>
+      <form class="sidebar-logout-form" method="post"
+        action="{{ url_for('main.admin_logout') if current_user.is_admin else url_for('main.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sidebar-logout-btn" title="Sair" aria-label="Sair">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
+            stroke-linejoin="round" aria-hidden="true">
+            <path d="M13 15l4-5-4-5" />
+            <path d="M17 10H7" />
+            <path d="M7 3H4a1 1 0 00-1 1v12a1 1 0 001 1h3" />
+          </svg>
+        </button>
+      </form>
+    </div>
+
+  </aside>
+
+  {# Mobile topbar #}
+  <header class="mobile-topbar">
+    <button class="mobile-menu-btn" id="mobile-menu-btn" aria-expanded="false" aria-controls="sidebar"
+      aria-label="Abrir menu">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        aria-hidden="true">
+        <path d="M3 5h14M3 10h14M3 15h14" />
+      </svg>
+    </button>
+    <div class="mobile-brand">
+      <span class="sidebar-dot"></span>
+      <strong>App Orçamentos</strong>
+    </div>
+  </header>
+
+  <div class="sidebar-overlay" id="sidebar-overlay" aria-hidden="true"></div>
+  {% endif %}
+
+  {# ══════════════ MAIN ══════════════ #}
+  <div class="app-shell">
+
+    {% if not current_user %}
+    <header class="auth-topbar">
+      <div class="auth-topbar-inner">
+        <div class="brand"><span class="dot"></span><strong>App Orçamentos</strong></div>
+      </div>
+    </header>
+    {% endif %}
+
+    <main class="layout">
+      {% with messages = get_flashed_messages(with_categories=True) %}
+      {% if messages %}
+      <section class="flash-list">
+        {% for category, message in messages %}
+        <article class="flash flash-{{ category }}">{{ message }}</article>
+        {% endfor %}
+      </section>
+      {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+
+  {# ══════════════ CONFIRM DIALOG ══════════════ #}
+  <div id="confirm-dialog" class="confirm-dialog" hidden>
+    <div class="confirm-backdrop" data-confirm-cancel></div>
+    <div class="confirm-panel" role="dialog" aria-modal="true" aria-labelledby="confirm-title"
+      aria-describedby="confirm-message">
+      <h2 id="confirm-title">Confirmar ação</h2>
+      <p id="confirm-message">Tem certeza que deseja continuar?</p>
+      <div class="confirm-actions">
+        <button type="button" class="button-muted" id="confirm-cancel">Cancelar</button>
+        <button type="button" class="danger" id="confirm-accept">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const csrfMeta = document.querySelector("meta[name='csrf-token']");
+      const csrfToken = csrfMeta ? csrfMeta.getAttribute("content") : "";
+      if (csrfToken) {
+        document.querySelectorAll("form[method='post'],form[method='POST']").forEach((form) => {
+          if (!form.querySelector("input[name='csrf_token']")) {
+            const h = document.createElement("input");
+            h.type = "hidden"; h.name = "csrf_token"; h.value = csrfToken;
+            form.appendChild(h);
+          }
+        });
+      }
+
+      const sidebar = document.getElementById("sidebar");
+      const overlay = document.getElementById("sidebar-overlay");
+      const menuBtn = document.getElementById("mobile-menu-btn");
+
+      const openSidebar = () => {
+        if (!sidebar) return;
+        sidebar.classList.add("is-open");
+        overlay && overlay.classList.add("is-visible");
+        menuBtn && menuBtn.setAttribute("aria-expanded", "true");
+        document.body.classList.add("sidebar-mobile-open");
+      };
+      const closeSidebar = () => {
+        if (!sidebar) return;
+        sidebar.classList.remove("is-open");
+        overlay && overlay.classList.remove("is-visible");
+        menuBtn && menuBtn.setAttribute("aria-expanded", "false");
+        document.body.classList.remove("sidebar-mobile-open");
+      };
+
+      menuBtn && menuBtn.addEventListener("click", () =>
+        sidebar.classList.contains("is-open") ? closeSidebar() : openSidebar()
+      );
+      overlay && overlay.addEventListener("click", closeSidebar);
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeSidebar(); });
+
+      const dialog = document.getElementById("confirm-dialog");
+      const messageEl = document.getElementById("confirm-message");
+      const cancelButton = document.getElementById("confirm-cancel");
+      const confirmButton = document.getElementById("confirm-accept");
+      let pendingForm = null;
+
+      if (!dialog || !messageEl || !cancelButton || !confirmButton) return;
+
+      const closeDialog = () => { pendingForm = null; dialog.hidden = true; document.body.classList.remove("dialog-open"); };
+      const openDialog = (form) => { pendingForm = form; messageEl.textContent = form.dataset.confirmMessage || "Tem certeza?"; dialog.hidden = false; document.body.classList.add("dialog-open"); cancelButton.focus(); };
+
+      document.addEventListener("submit", (e) => {
+        const form = e.target;
+        if (!(form instanceof HTMLFormElement) || !form.dataset.confirmMessage) return;
+        e.preventDefault(); openDialog(form);
+      });
+      confirmButton.addEventListener("click", () => { if (!pendingForm) return; const f = pendingForm; closeDialog(); f.submit(); });
+      cancelButton.addEventListener("click", closeDialog);
+      dialog.querySelectorAll("[data-confirm-cancel]").forEach(el => el.addEventListener("click", closeDialog));
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !dialog.hidden) closeDialog(); });
+    })();
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Fornecedores | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <h1>Fornecedores</h1>
+    <div class="head-actions">
+      <a href="{{ url_for('main.export_suppliers', q=query) }}">Exportar CSV</a>
+      {% if can_create_supplier %}
+        <a class="button" href="{{ url_for('main.create_supplier') }}">Novo fornecedor</a>
+      {% else %}
+        <a class="button button-muted" href="{{ url_for('main.subscription') }}">Limite atingido</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if supplier_limit %}
+    <p class="meta">Plano atual: {{ suppliers_total }} de {{ supplier_limit }} fornecedores cadastrados.</p>
+  {% else %}
+    <p class="meta">Plano atual: fornecedores ilimitados.</p>
+  {% endif %}
+
+  <form class="search" method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="Buscar por nome, empresa, telefone ou email">
+    <button type="submit">Buscar</button>
+  </form>
+
+  {% if suppliers %}
+    <p class="meta">Pagina {{ pagination.page }} de {{ pagination.pages or 1 }} | Total: {{ pagination.total }}</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Nome</th>
+            <th>Empresa</th>
+            <th>Contato</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for supplier in suppliers %}
+          <tr>
+            <td>{{ supplier.name }}</td>
+            <td>{{ supplier.company or "-" }}</td>
+            <td>
+              <div>{{ supplier.phone or "-" }}</div>
+              <div>{{ supplier.email or "-" }}</div>
+            </td>
+            <td class="actions">
+              <a href="{{ url_for('main.edit_supplier', supplier_id=supplier.id) }}">Editar</a>
+              <form method="post" action="{{ url_for('main.delete_supplier', supplier_id=supplier.id) }}" data-confirm-message="Excluir fornecedor?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="danger" type="submit">Excluir</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      {% if pagination.has_prev %}
+        <a href="{{ url_for('main.suppliers', q=query, page=pagination.prev_num) }}">Anterior</a>
+      {% endif %}
+      <span>Pagina {{ pagination.page }}</span>
+      {% if pagination.has_next %}
+        <a href="{{ url_for('main.suppliers', q=query, page=pagination.next_num) }}">Proxima</a>
+      {% endif %}
+    </div>
+  {% else %}
+    <p>Nenhum fornecedor encontrado.</p>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Admin Usuarios | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <h1>Usuarios cadastrados</h1>
+    <a href="{{ url_for('main.admin_dashboard') }}">Ver dashboard</a>
+  </div>
+
+  {% if users %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Usuario</th>
+            <th>Email</th>
+            <th>Perfil</th>
+            <th>Assinatura</th>
+            <th>Vencimento</th>
+            <th>Ultimo pagamento</th>
+            <th>Criado em</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in users %}
+            <tr>
+              <td>{{ user.id }}</td>
+              <td>{{ user.username }}</td>
+              <td>{{ user.email }}</td>
+              <td>{% if user.is_admin %}Administrador{% else %}Usuario{% endif %}</td>
+              <td>{{ user.subscription_status }}</td>
+              <td>{% if user.subscription_expires_at %}{{ user.subscription_expires_at.strftime("%d/%m/%Y %H:%M") }}{% else %}-{% endif %}</td>
+              <td>{% if user.subscription_last_payment_at %}{{ user.subscription_last_payment_at.strftime("%d/%m/%Y %H:%M") }}{% else %}-{% endif %}</td>
+              <td>{{ user.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+              <td class="actions">
+                {% if (not master_username or user.username|lower != master_username|lower) and user.id != current_user.id %}
+                  <details class="action-dropdown">
+                    <summary class="action-dropdown-trigger">Acoes <span class="caret">&#9662;</span></summary>
+                    <div class="action-dropdown-menu">
+                      {% if user.subscription_status == "suspended" %}
+                        <form method="post" action="{{ url_for('main.reactivate_user', user_id=user.id) }}" data-confirm-message="Reativar este usuario?">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                          <button type="submit" class="button-sm">Reativar</button>
+                        </form>
+                      {% else %}
+                        <form method="post" action="{{ url_for('main.suspend_user', user_id=user.id) }}" data-confirm-message="Suspender este usuario?">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                          <button type="submit" class="button-sm button-muted">Suspender</button>
+                        </form>
+                      {% endif %}
+                      <form method="post" action="{{ url_for('main.force_user_logout', user_id=user.id) }}" data-confirm-message="Forcar novo login para este usuario?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                        <button type="submit" class="button-sm">Forcar logout</button>
+                      </form>
+                      <form method="post" action="{{ url_for('main.reset_user_whatsapp_session', user_id=user.id) }}" data-confirm-message="Resetar sessao WhatsApp deste usuario?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                        <button type="submit" class="button-sm button-muted">Resetar WhatsApp</button>
+                      </form>
+                      <form method="post" action="{{ url_for('main.revoke_user_subscription', user_id=user.id) }}" data-confirm-message="Revogar assinatura deste usuario?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                        <button type="submit" class="button-sm">Revogar assinatura</button>
+                      </form>
+                      <form method="post" action="{{ url_for('main.remove_user', user_id=user.id) }}" data-confirm-message="Remover este usuario?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                        <button type="submit" class="danger button-sm">Remover</button>
+                      </form>
+                    </div>
+                  </details>
+                {% else %}
+                  <span class="meta">Protegido</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>Nenhum usuario cadastrado.</p>
+  {% endif %}
+</section>
+
+{% if payment_test_mode %}
+<section class="panel">
+  <div class="panel-head">
+    <h3>Pagamentos pendentes (modo teste)</h3>
+  </div>
+  {% if pending_orders %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Pedido</th>
+            <th>Usuario</th>
+            <th>Plano</th>
+            <th>Valor</th>
+            <th>Criado em</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in pending_orders %}
+            <tr>
+              <td>#{{ order.id }}</td>
+              <td>
+                {% if order.user %}
+                  {{ order.user.username }}<br>
+                  <small>{{ order.user.email }}</small>
+                {% else %}
+                  Usuario nao encontrado
+                {% endif %}
+              </td>
+              <td>{{ order.plan_name }}</td>
+              <td>{{ format_currency_from_cents(order.amount_cents, order.currency) }}</td>
+              <td>{{ order.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+              <td class="actions">
+                <form method="post" action="{{ url_for('main.admin_confirm_subscription_order', order_id=order.id) }}" data-confirm-message="Confirmar pagamento deste pedido em modo teste?">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="button-sm">Aceitar pagamento (teste)</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>Nenhum pagamento pendente.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="panel-head">
+    <h3>Usuarios renovados (ultimos 30 dias)</h3>
+  </div>
+  {% if renewed_users %}
+    <ul class="template-list">
+      {% for user in renewed_users %}
+        <li>
+          <strong>{{ user.username }}</strong>
+          <div class="meta">
+            {{ user.email }} |
+            Ultimo pagamento: {{ user.subscription_last_payment_at.strftime("%d/%m/%Y %H:%M") if user.subscription_last_payment_at else "-" }} |
+            Vence em: {{ user.subscription_expires_at.strftime("%d/%m/%Y %H:%M") if user.subscription_expires_at else "-" }}
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p>Nenhum usuario renovado no periodo.</p>
+  {% endif %}
+</section>
+{% endblock %}
+

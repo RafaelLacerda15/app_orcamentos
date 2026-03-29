@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Login | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel auth-panel">
+  <div class="panel-head">
+    <h1>Login</h1>
+  </div>
+
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="full">
+      Usuario
+      <input name="username" required autofocus>
+    </label>
+    <label class="full">
+      Senha
+      <input name="password" type="password" required>
+    </label>
+    <div class="full auth-actions">
+      <button class="button" type="submit">Entrar</button>
+      <a class="button button-muted" href="{{ url_for('main.register') }}">Criar conta</a>
+      <a class="button button-muted" href="{{ url_for('main.forgot_password') }}">Esqueci minha senha</a>
+    </div>
+  </form>
+</section>
+{% endblock %}
+

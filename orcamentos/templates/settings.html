@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Configuracoes | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel settings-panel">
+  <div class="panel-head">
+    <h1>Configuracoes</h1>
+  </div>
+
+  <p class="settings-intro">
+    Conecte o WhatsApp Web para liberar o envio de mensagens pelo sistema.
+  </p>
+
+  <div class="settings-help">
+    <h2>Como fazer login no WhatsApp</h2>
+    <ol>
+      <li>Clique em <strong>Iniciar login WhatsApp</strong>.</li>
+      <li>Abra o WhatsApp no celular e entre em <strong>Dispositivos conectados</strong>.</li>
+      <li>Toque em <strong>Conectar dispositivo</strong> e escaneie o QR Code exibido abaixo.</li>
+      <li>Aguarde o status mudar para <strong>Conectado</strong>.</li>
+    </ol>
+    <p class="meta">
+      Seguranca: o login ocorre no seu proprio WhatsApp Web. A sessao fica salva localmente no servidor da aplicacao e
+      voce pode desconectar quando quiser.
+    </p>
+  </div>
+
+  <div class="settings-actions">
+    <button class="button" id="wa-start" type="button">Iniciar login WhatsApp</button>
+    <button class="button-muted" id="wa-stop" type="button">Desconectar sessao</button>
+    <span class="status-pill status-disconnected" id="wa-status">Desconectado</span>
+  </div>
+
+  <div class="wa-qr-card">
+    <h2>QR Code da sessao</h2>
+    <p id="wa-message" class="meta">Clique em "Iniciar login WhatsApp" para gerar o QR Code.</p>
+    <div class="wa-qr-wrap" id="wa-qr-wrap">
+      <img id="wa-qr-image" alt="QR Code do WhatsApp Web" role="button" tabindex="0" hidden>
+      <p id="wa-qr-empty" class="meta">QR Code ainda nao disponivel.</p>
+    </div>
+  </div>
+
+  <div id="qr-preview-modal" class="qr-preview-modal" hidden>
+    <div class="qr-preview-backdrop" data-qr-close></div>
+    <div class="qr-preview-panel" role="dialog" aria-modal="true" aria-label="QR Code ampliado">
+      <button type="button" class="button-muted qr-preview-close" id="qr-preview-close" data-qr-close>Fechar</button>
+      <img id="qr-preview-image" alt="QR Code ampliado do WhatsApp Web">
+    </div>
+  </div>
+
+  {% if app_env == "development" %}
+    <div class="settings-help">
+      <h2>Teste de envio (somente desenvolvimento)</h2>
+      {% if whatsapp_is_pywhatkit %}
+        <form method="post" action="{{ url_for('main.send_whatsapp_test_message') }}" class="form-grid">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="full">
+            Telefone
+            <input name="phone" value="{{ whatsapp_test_default_phone }}" placeholder="+5511999999999" required>
+          </label>
+          <label class="full">
+            Mensagem
+            <textarea name="message" rows="4" required>Mensagem de teste enviada pelo App Orcamentos usando PyWhatKit.</textarea>
+          </label>
+          <div class="full">
+            <button class="button" type="submit">Enviar teste via PyWhatKit</button>
+          </div>
+        </form>
+      {% else %}
+        <p class="meta">Ative o provedor PyWhatKit no <code>.env</code> para liberar o envio de teste por aqui.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+</section>
+
+<script>
+  (() => {
+    const startButton = document.getElementById("wa-start");
+    const stopButton = document.getElementById("wa-stop");
+    const statusEl = document.getElementById("wa-status");
+    const messageEl = document.getElementById("wa-message");
+    const qrImageEl = document.getElementById("wa-qr-image");
+    const qrEmptyEl = document.getElementById("wa-qr-empty");
+    const qrPreviewModal = document.getElementById("qr-preview-modal");
+    const qrPreviewImage = document.getElementById("qr-preview-image");
+    const qrPreviewClose = document.getElementById("qr-preview-close");
+
+    const sessionStatusMap = {
+      connected: { label: "Conectado", className: "status-connected" },
+      waiting_qr: { label: "Aguardando QR", className: "status-waiting" },
+      connecting: { label: "Conectando", className: "status-connecting" },
+      disconnected: { label: "Desconectado", className: "status-disconnected" },
+      error: { label: "Erro", className: "status-error" },
+    };
+
+    function setLoading(button, loading, labelWhenIdle) {
+      if (!button) return;
+      button.disabled = loading;
+      button.textContent = loading ? "Processando..." : labelWhenIdle;
+    }
+
+    function applySessionState(state) {
+      const normalized = state && state.status ? state.status : "disconnected";
+      const mapped = sessionStatusMap[normalized] || sessionStatusMap.disconnected;
+
+      statusEl.textContent = mapped.label;
+      statusEl.className = "status-pill " + mapped.className;
+      messageEl.textContent = state && state.message ? state.message : "Sem informacoes.";
+
+      if (state && state.qr_code) {
+        qrImageEl.src = state.qr_code;
+        qrImageEl.title = "Clique para ampliar";
+        qrImageEl.hidden = false;
+        qrEmptyEl.hidden = true;
+      } else {
+        qrImageEl.removeAttribute("src");
+        qrImageEl.removeAttribute("title");
+        qrImageEl.hidden = true;
+        qrEmptyEl.hidden = false;
+        closeQrPreview();
+      }
+    }
+
+    function openQrPreview() {
+      if (!qrPreviewModal || !qrPreviewImage || qrImageEl.hidden || !qrImageEl.src) return;
+      qrPreviewImage.src = qrImageEl.src;
+      qrPreviewModal.hidden = false;
+      document.body.classList.add("dialog-open");
+      if (qrPreviewClose instanceof HTMLButtonElement) {
+        qrPreviewClose.focus();
+      }
+    }
+
+    function closeQrPreview() {
+      if (!qrPreviewModal || !qrPreviewImage) return;
+      qrPreviewModal.hidden = true;
+      qrPreviewImage.removeAttribute("src");
+      document.body.classList.remove("dialog-open");
+    }
+
+    async function fetchSessionStatus() {
+      try {
+        const response = await fetch("{{ url_for('main.whatsapp_status') }}", {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+        });
+        if (!response.ok) throw new Error("Falha ao consultar status.");
+        applySessionState(await response.json());
+      } catch (_error) {
+        applySessionState({ status: "error", message: "Nao foi possivel consultar o status da sessao." });
+      }
+    }
+
+    async function postAction(url, button, idleLabel) {
+      setLoading(button, true, idleLabel);
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "X-CSRFToken": "{{ csrf_token() }}",
+          },
+        });
+        if (!response.ok) throw new Error("Falha na acao.");
+        applySessionState(await response.json());
+      } catch (_error) {
+        applySessionState({ status: "error", message: "Erro ao executar a acao." });
+      } finally {
+        setLoading(button, false, idleLabel);
+      }
+    }
+
+    startButton.addEventListener("click", () => {
+      postAction("{{ url_for('main.start_whatsapp_session') }}", startButton, "Iniciar login WhatsApp");
+    });
+
+    stopButton.addEventListener("click", () => {
+      postAction("{{ url_for('main.stop_whatsapp_session') }}", stopButton, "Desconectar sessao");
+    });
+
+    qrImageEl.addEventListener("click", openQrPreview);
+    qrImageEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openQrPreview();
+      }
+    });
+    if (qrPreviewModal) {
+      qrPreviewModal.querySelectorAll("[data-qr-close]").forEach((el) => {
+        el.addEventListener("click", closeQrPreview);
+      });
+    }
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && qrPreviewModal && !qrPreviewModal.hidden) {
+        closeQrPreview();
+      }
+    });
+
+    fetchSessionStatus();
+    window.setInterval(fetchSessionStatus, 3000);
+  })();
+</script>
+{% endblock %}

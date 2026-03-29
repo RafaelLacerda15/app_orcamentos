@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <h1>Assinatura</h1>
+    <a href="{{ url_for('main.subscription') }}">Gerenciar mensalidade</a>
+  </div>
+  {% if subscription_active and subscription_expires_at %}
+    <p class="meta">
+      Sua assinatura esta ativa ate <strong>{{ subscription_expires_at.strftime("%d/%m/%Y %H:%M") }}</strong>.
+    </p>
+  {% else %}
+    <p class="meta">
+      Sua assinatura esta inativa. Ative o plano mensal para manter o acesso ao sistema.
+    </p>
+    <a class="button" href="{{ url_for('main.subscription') }}">Comprar mensalidade</a>
+  {% endif %}
+</section>
+
+{% if whatsapp_connection_warning %}
+<section class="panel">
+  <article class="flash flash-error">
+    {{ whatsapp_connection_warning }}
+    <a href="{{ url_for('main.settings') }}">Conectar WhatsApp</a>
+  </article>
+</section>
+{% endif %}
+
+<section class="panel summary-only">
+  <div class="panel-head">
+    <h1>Resumo</h1>
+  </div>
+  <section class="grid cards">
+    <article class="card">
+      <h2>{{ supplier_count }}</h2>
+      <p>Fornecedores</p>
+    </article>
+    <article class="card">
+      <h2>{{ template_count }}</h2>
+      <p>Templates de mensagem</p>
+    </article>
+    <article class="card">
+      <h2>{{ message_count }}</h2>
+      <p>Mensagens no historico</p>
+    </article>
+    <article class="card">
+      <h2>{{ messages_last_30 }}</h2>
+      <p>Mensagens (ultimos 30 dias)</p>
+    </article>
+  </section>
+</section>
+
+<section class="panel">
+  <div class="panel-head">
+    <h3>Atividades recentes</h3>
+    <a href="{{ url_for('main.history') }}">Ver tudo</a>
+  </div>
+  {% if recent_activities %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Fornecedor</th>
+            <th>Status</th>
+            <th>Data</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in recent_activities %}
+            <tr>
+              <td>{{ item.supplier.name }}</td>
+              <td>{{ item.status }}</td>
+              <td>{{ item.sent_at.strftime("%d/%m/%Y %H:%M") }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p>Nenhuma atividade registrada.</p>
+  {% endif %}
+</section>
+{% endblock %}

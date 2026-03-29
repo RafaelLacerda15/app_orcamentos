@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Banco de dados | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <h1>Banco de dados</h1>
+    <a href="{{ url_for('main.admin_dashboard') }}">Voltar ao dashboard</a>
+  </div>
+
+  <p><strong>URI:</strong> <code>{{ uri }}</code></p>
+  {% if sqlite_path %}
+    <p><strong>Arquivo SQLite:</strong> <code>{{ sqlite_path }}</code></p>
+  {% endif %}
+  {% if sqlite_size_kb is not none %}
+    <p><strong>Tamanho:</strong> {{ sqlite_size_kb }} KB</p>
+  {% endif %}
+
+  <h3>Resumo de tabelas</h3>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Tabela</th>
+          <th>Registros</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for name, count in table_counts.items() %}
+          <tr>
+            <td>{{ name }}</td>
+            <td>{{ count }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

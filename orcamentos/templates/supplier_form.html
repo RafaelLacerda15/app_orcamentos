@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel form-panel">
+  <div class="panel-head">
+    <h1>{{ title }}</h1>
+    <a href="{{ url_for('main.suppliers') }}">Voltar</a>
+  </div>
+
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label>
+      Nome
+      <input name="name" required value="{{ form_data.name if form_data else (supplier.name if supplier else '') }}">
+    </label>
+    <label>
+      Empresa
+      <input name="company" value="{{ form_data.company if form_data else (supplier.company if supplier else '') }}">
+    </label>
+    <label>
+      Telefone / WhatsApp
+      <input name="phone" value="{{ form_data.phone if form_data else (supplier.phone if supplier else '') }}">
+    </label>
+    <label>
+      Email
+      <input type="email" name="email" value="{{ form_data.email if form_data else (supplier.email if supplier else '') }}">
+    </label>
+    <label class="full">
+      Observacoes
+      <textarea name="notes" rows="4">{{ form_data.notes if form_data else (supplier.notes if supplier else '') }}</textarea>
+    </label>
+    <div class="full">
+      <button class="button" type="submit">Salvar</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+

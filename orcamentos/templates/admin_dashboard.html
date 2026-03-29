@@ -1,0 +1,796 @@
+﻿{% extends "base.html" %}
+{% block title %}Dashboard Admin | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel summary-only">
+  <div class="panel-head">
+    <h1>Painel administrativo</h1>
+    <div class="head-actions">
+      <a href="{{ url_for('main.admin_users') }}">Gerenciar usuarios</a>
+      <a href="{{ url_for('main.admin_database') }}">Banco de dados</a>
+    </div>
+  </div>
+  <section class="grid cards">
+    <article class="card">
+      <h2>{{ users_common }}</h2>
+      <p>Usuarios membros</p>
+    </article>
+    <article class="card">
+      <h2>{{ users_with_active_subscription }}</h2>
+      <p>Assinaturas ativas</p>
+    </article>
+    <article class="card">
+      <h2>{{ users_suspended }}</h2>
+      <p>Usuarios suspensos</p>
+    </article>
+    <article class="card">
+      <h2>{{ pending_orders_count }}</h2>
+      <p>Pedidos pendentes</p>
+    </article>
+  </section>
+</section>
+
+<section class="panel">
+  <nav class="admin-tabs" role="tablist" aria-label="Secoes do dashboard admin">
+    <button type="button" class="admin-tab-btn" data-admin-tab-btn="overview">Visao geral</button>
+    <button type="button" class="admin-tab-btn" data-admin-tab-btn="performance">Performance</button>
+    <button type="button" class="admin-tab-btn" data-admin-tab-btn="users">Usuarios</button>
+    <button type="button" class="admin-tab-btn" data-admin-tab-btn="operations">Operacoes</button>
+    <button type="button" class="admin-tab-btn" data-admin-tab-btn="support">Suporte</button>
+  </nav>
+</section>
+
+<section class="admin-tab-panel" data-admin-tab-panel="overview">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Resumo essencial</h3>
+    </div>
+    <section class="grid cards">
+      <article class="card">
+        <h2>{{ format_currency_from_cents(financial_summary.mrr_cents, "BRL") }}</h2>
+        <p>MRR estimado</p>
+      </article>
+      <article class="card">
+        <h2>{{ delivery_health.messages_last_24h }}</h2>
+        <p>Mensagens ultimas 24h</p>
+      </article>
+      <article class="card">
+        <h2>{{ delivery_health.success_rate_last_7d }}%</h2>
+        <p>Taxa de sucesso (7d)</p>
+      </article>
+      <article class="card">
+        <h2>{{ users_with_expired_subscription }}</h2>
+        <p>Assinaturas vencidas</p>
+      </article>
+    </section>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Alertas rapidos</h3>
+    </div>
+    <section class="grid cards">
+      {% for alert in alert_items %}
+        <article class="card">
+          <h2>{{ alert.count }}</h2>
+          <p>{{ alert.label }}</p>
+        </article>
+      {% endfor %}
+    </section>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Pedidos pendentes</h3>
+    </div>
+    {% if pending_orders %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Usuario</th>
+              <th>Plano</th>
+              <th>Valor</th>
+              <th>Criado em</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for order in pending_orders %}
+              <tr>
+                <td>#{{ order.id }}</td>
+                <td>{% if order.user %}{{ order.user.username }}{% else %}Usuario removido{% endif %}</td>
+                <td>{{ order.plan_name }}</td>
+                <td>{{ format_currency_from_cents(order.amount_cents, order.currency) }}</td>
+                <td>{{ order.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>Nenhum pedido pendente no momento.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Ultimos usuarios cadastrados</h3>
+    </div>
+    {% if latest_users %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Email</th>
+              <th>Assinatura</th>
+              <th>Vencimento</th>
+              <th>Criado em</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in latest_users %}
+              <tr>
+                <td>{{ user.username }}</td>
+                <td>{{ user.email }}</td>
+                <td>{{ user.subscription_status }}</td>
+                <td>{% if user.subscription_expires_at %}{{ user.subscription_expires_at.strftime("%d/%m/%Y %H:%M") }}{% else %}-{% endif %}</td>
+                <td>{{ user.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>Nenhum usuario cadastrado.</p>
+    {% endif %}
+  </section>
+</section>
+
+<section class="admin-tab-panel" data-admin-tab-panel="performance">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Financeiro e assinaturas</h3>
+    </div>
+    <section class="grid cards">
+      <article class="card">
+        <h2>{{ format_currency_from_cents(financial_summary.mrr_cents, "BRL") }}</h2>
+        <p>MRR estimado atual</p>
+      </article>
+      <article class="card">
+        <h2>{{ format_currency_from_cents(financial_summary.paid_revenue_last_30_cents, "BRL") }}</h2>
+        <p>Receita paga ultimos 30 dias (delta {{ financial_summary.paid_revenue_delta_percent }}%)</p>
+      </article>
+      <article class="card">
+        <h2>{{ format_currency_from_cents(financial_summary.pending_revenue_cents, "BRL") }}</h2>
+        <p>Receita pendente</p>
+      </article>
+      <article class="card">
+        <h2>{{ financial_summary.active_paid_users }}</h2>
+        <p>Usuarios ativos pagos</p>
+      </article>
+      <article class="card">
+        <h2>{{ financial_summary.active_trial_users }}</h2>
+        <p>Usuarios ativos em trial</p>
+      </article>
+      <article class="card">
+        <h2>{{ financial_summary.churn_rate_last_30 }}%</h2>
+        <p>Churn ultimos 30 dias</p>
+      </article>
+    </section>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Funil de ativacao</h3>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Etapa</th>
+            <th>Usuarios</th>
+            <th>Conversao total</th>
+            <th>Conversao etapa</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for step in funnel_steps %}
+            <tr>
+              <td>{{ step.label }}</td>
+              <td>{{ step.count }}</td>
+              <td>{{ step.conversion_total }}%</td>
+              <td>{{ step.conversion_prev }}%</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Saude de envios</h3>
+    </div>
+    <section class="grid cards">
+      <article class="card">
+        <h2>{{ delivery_health.messages_last_24h }}</h2>
+        <p>Mensagens nas ultimas 24h</p>
+      </article>
+      <article class="card">
+        <h2>{{ delivery_health.messages_last_7d }}</h2>
+        <p>Mensagens nos ultimos 7 dias</p>
+      </article>
+      <article class="card">
+        <h2>{{ delivery_health.delivered_last_7d }}</h2>
+        <p>Enviadas com sucesso (7 dias)</p>
+      </article>
+      <article class="card">
+        <h2>{{ delivery_health.failed_last_7d }}</h2>
+        <p>Falhas de envio (7 dias)</p>
+      </article>
+      <article class="card">
+        <h2>{{ delivery_health.simulated_last_7d }}</h2>
+        <p>Simuladas (7 dias)</p>
+      </article>
+      <article class="card">
+        <h2>{{ delivery_health.success_rate_last_7d }}%</h2>
+        <p>Taxa de sucesso (enviado/erro)</p>
+      </article>
+    </section>
+    <h4>Por usuario (7 dias)</h4>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Total</th>
+            <th>Sucesso</th>
+            <th>Falha</th>
+            <th>Taxa falha</th>
+            <th>Ultimo envio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in delivery_health.health_by_user %}
+            <tr>
+              <td><a href="{{ url_for('main.admin_dashboard', support_user_id=row.user_id, aba='support') }}">{{ row.username }}</a></td>
+              <td>{{ row.total_count }}</td>
+              <td>{{ row.success_count }}</td>
+              <td>{{ row.failed_count }}</td>
+              <td>{{ row.failure_rate }}%</td>
+              <td>{% if row.last_sent_at %}{{ row.last_sent_at.strftime("%d/%m/%Y %H:%M") }}{% else %}-{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+
+<section class="admin-tab-panel" data-admin-tab-panel="users">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Top usuarios (uso)</h3>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Assinatura</th>
+            <th>Fornecedores</th>
+            <th>Templates</th>
+            <th>Mensagens total</th>
+            <th>Mensagens 30d</th>
+            <th>Ultimo envio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in top_users %}
+            <tr>
+              <td><a href="{{ url_for('main.admin_dashboard', support_user_id=row.id, aba='support') }}">{{ row.username }}</a><br><small>{{ row.email }}</small></td>
+              <td>{{ row.subscription_status }}</td>
+              <td>{{ row.suppliers_count }}</td>
+              <td>{{ row.templates_count }}</td>
+              <td>{{ row.messages_count }}</td>
+              <td>{{ row.messages_30d_count }}</td>
+              <td>{% if row.last_sent_at %}{{ row.last_sent_at.strftime("%d/%m/%Y %H:%M") }}{% else %}-{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Moderacao rapida</h3>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Status</th>
+            <th>Vencimento</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user in moderation_users %}
+            <tr>
+              <td><a href="{{ url_for('main.admin_dashboard', support_user_id=user.id, aba='support') }}">{{ user.username }}</a><br><small>{{ user.email }}</small></td>
+              <td>{{ user.subscription_status }}</td>
+              <td>{% if user.subscription_expires_at %}{{ user.subscription_expires_at.strftime("%d/%m/%Y %H:%M") }}{% else %}-{% endif %}</td>
+              <td class="actions">
+                <details class="action-dropdown">
+                  <summary class="action-dropdown-trigger">Acoes <span class="caret">&#9662;</span></summary>
+                  <div class="action-dropdown-menu">
+                    {% if user.subscription_status == "suspended" %}
+                      <form method="post" action="{{ url_for('main.reactivate_user', user_id=user.id) }}" data-confirm-message="Reativar este usuario?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                        <button type="submit" class="button-sm">Reativar</button>
+                      </form>
+                    {% else %}
+                      <form method="post" action="{{ url_for('main.suspend_user', user_id=user.id) }}" data-confirm-message="Suspender este usuario?">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                        <button type="submit" class="button-sm button-muted">Suspender</button>
+                      </form>
+                    {% endif %}
+                    <form method="post" action="{{ url_for('main.force_user_logout', user_id=user.id) }}" data-confirm-message="Forcar novo login para este usuario?">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                      <button type="submit" class="button-sm">Forcar logout</button>
+                    </form>
+                    <form method="post" action="{{ url_for('main.reset_user_whatsapp_session', user_id=user.id) }}" data-confirm-message="Resetar sessao WhatsApp deste usuario?">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                      <button type="submit" class="button-sm button-muted">Resetar WhatsApp</button>
+                    </form>
+                    <form method="post" action="{{ url_for('main.revoke_user_subscription', user_id=user.id) }}" data-confirm-message="Revogar assinatura deste usuario?">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                      <button type="submit" class="button-sm">Revogar assinatura</button>
+                    </form>
+                  </div>
+                </details>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+
+<section class="admin-tab-panel" data-admin-tab-panel="operations">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Alertas operacionais detalhados</h3>
+    </div>
+    <section class="grid two-cols">
+      <article>
+        <h4>Assinaturas vencendo em 7 dias</h4>
+        {% if expiring_users %}
+          <ul class="template-list">
+            {% for user in expiring_users %}
+              <li>
+                <strong><a href="{{ url_for('main.admin_dashboard', support_user_id=user.id, aba='support') }}">{{ user.username }}</a></strong>
+                <div class="meta">Vence em {{ user.subscription_expires_at.strftime("%d/%m/%Y %H:%M") if user.subscription_expires_at else "-" }}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>Nenhum usuario proximo de vencimento.</p>
+        {% endif %}
+      </article>
+      <article>
+        <h4>Usuarios ativos sem envio recente (30d)</h4>
+        {% if stale_active_users %}
+          <ul class="template-list">
+            {% for user, last_sent_at in stale_active_users %}
+              <li>
+                <strong><a href="{{ url_for('main.admin_dashboard', support_user_id=user.id, aba='support') }}">{{ user.username }}</a></strong>
+                <div class="meta">Ultimo envio: {% if last_sent_at %}{{ last_sent_at.strftime("%d/%m/%Y %H:%M") }}{% else %}nenhum{% endif %}</div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p>Sem usuarios ativos inativos por envio.</p>
+        {% endif %}
+      </article>
+    </section>
+    <h4>Usuarios com alta taxa de falha</h4>
+    {% if high_failure_users %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Falhas</th>
+              <th>Taxa de falha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in high_failure_users %}
+              <tr>
+                <td><a href="{{ url_for('main.admin_dashboard', support_user_id=row.user_id, aba='support') }}">{{ row.username }}</a></td>
+                <td>{{ row.failed_count }}</td>
+                <td>{{ row.failure_rate }}%</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>Nenhum usuario com nivel alto de falha no periodo.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Auditoria administrativa</h3>
+      <form method="get" class="search">
+        <input type="hidden" name="aba" value="operations">
+        <input type="text" name="q" value="{{ search_query }}" placeholder="Busca global (usuario, email, fornecedor, telefone)">
+        <select name="audit_action">
+          <option value="">Todas as acoes</option>
+          {% for action_name in audit_actions %}
+            <option value="{{ action_name }}" {% if audit_action == action_name %}selected{% endif %}>{{ action_name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Filtrar</button>
+      </form>
+    </div>
+    {% if audit_logs %}
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Acao</th>
+              <th>Admin</th>
+              <th>Usuario alvo</th>
+              <th>Detalhes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for log, admin_username, target_username in audit_logs %}
+              <tr>
+                <td>{{ log.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+                <td>{{ log.action }}</td>
+                <td>{{ admin_username }}</td>
+                <td>{% if log.target_user_id %}{{ target_username or ("#" ~ log.target_user_id) }}{% else %}-{% endif %}</td>
+                <td>{{ log.details or "-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p>Nenhum evento de auditoria encontrado.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Saude do banco</h3>
+      <a href="{{ url_for('main.admin_database') }}">Abrir pagina detalhada</a>
+    </div>
+    {% set integrity = db_health.sqlite_integrity %}
+    <p><strong>URI:</strong> <code>{{ db_health.uri }}</code></p>
+    {% if db_health.sqlite_path %}
+      <p><strong>Arquivo:</strong> <code>{{ db_health.sqlite_path }}</code></p>
+    {% endif %}
+    {% if db_health.sqlite_size_kb is not none %}
+      <p><strong>Tamanho:</strong> {{ db_health.sqlite_size_kb }} KB</p>
+    {% endif %}
+    <p>
+      <strong>Integridade:</strong>
+      <span class="status-pill {% if integrity.status == 'ok' %}status-connected{% elif integrity.status == 'error' %}status-error{% else %}status-disconnected{% endif %}">
+        {{ integrity.message }}
+      </span>
+    </p>
+    <p><strong>Sessoes WhatsApp gerenciadas:</strong> {{ db_health.active_whatsapp_managers }}</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Tabela</th>
+            <th>Registros</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for table_name, table_count in db_health.table_counts.items() %}
+            <tr>
+              <td>{{ table_name }}</td>
+              <td>{{ table_count }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+
+<section class="admin-tab-panel" data-admin-tab-panel="support">
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Busca global e suporte</h3>
+    </div>
+    <form method="get" class="search">
+      <input type="hidden" name="aba" value="support">
+      {% if audit_action %}
+        <input type="hidden" name="audit_action" value="{{ audit_action }}">
+      {% endif %}
+      <input type="text" name="q" value="{{ search_query }}" placeholder="Digite usuario, email, telefone ou fornecedor">
+      <button type="submit">Buscar</button>
+    </form>
+    {% if search_query %}
+      <p>Resultados para: <strong>{{ search_query }}</strong></p>
+      <section class="grid two-cols">
+        <article>
+          <h4>Usuarios encontrados</h4>
+          {% if user_search_results %}
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Usuario</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Abrir</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for user in user_search_results %}
+                    <tr>
+                      <td>{{ user.username }}</td>
+                      <td>{{ user.email }}</td>
+                      <td>{{ user.subscription_status }}</td>
+                      <td><a href="{{ url_for('main.admin_dashboard', q=search_query, support_user_id=user.id, audit_action=audit_action, aba='support') }}">Perfil rapido</a></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p>Nenhum usuario encontrado.</p>
+          {% endif %}
+        </article>
+        <article>
+          <h4>Fornecedores encontrados</h4>
+          {% if supplier_search_results %}
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Fornecedor</th>
+                    <th>Contato</th>
+                    <th>Dono</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for supplier, owner_username, owner_user_id in supplier_search_results %}
+                    <tr>
+                      <td>{{ supplier.name }}</td>
+                      <td>{{ supplier.phone or supplier.email or "-" }}</td>
+                      <td><a href="{{ url_for('main.admin_dashboard', q=search_query, support_user_id=owner_user_id, audit_action=audit_action, aba='support') }}">{{ owner_username }}</a></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p>Nenhum fornecedor encontrado.</p>
+          {% endif %}
+        </article>
+      </section>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h3>Visao rapida de suporte</h3>
+    </div>
+    {% if support_profile %}
+      {% set su = support_profile.user %}
+      <p><strong>Usuario:</strong> {{ su.username }} (ID {{ su.id }})</p>
+      <p><strong>Email:</strong> {{ su.email }}{% if su.phone %} | <strong>Telefone:</strong> {{ su.phone }}{% endif %}</p>
+      <p>
+        <strong>Status assinatura:</strong> {{ su.subscription_status }}
+        {% if su.subscription_expires_at %}| <strong>Vence:</strong> {{ su.subscription_expires_at.strftime("%d/%m/%Y %H:%M") }}{% endif %}
+      </p>
+      <p>
+        <strong>Sessao WhatsApp:</strong>
+        <span class="status-pill {% if support_profile.whatsapp_state.status == 'connected' %}status-connected{% elif support_profile.whatsapp_state.status in ['connecting', 'waiting_qr'] %}status-waiting{% else %}status-disconnected{% endif %}">
+          {{ support_profile.whatsapp_state.status }}
+        </span>
+        {{ support_profile.whatsapp_state.message or "" }}
+      </p>
+      <section class="grid cards">
+        <article class="card">
+          <h2>{{ support_profile.stats.suppliers_count }}</h2>
+          <p>Fornecedores</p>
+        </article>
+        <article class="card">
+          <h2>{{ support_profile.stats.templates_count }}</h2>
+          <p>Templates</p>
+        </article>
+        <article class="card">
+          <h2>{{ support_profile.stats.messages_count }}</h2>
+          <p>Mensagens total</p>
+        </article>
+        <article class="card">
+          <h2>{{ support_profile.stats.messages_30d_count }}</h2>
+          <p>Mensagens ultimos 30 dias</p>
+        </article>
+        <article class="card">
+          <h2>{{ support_profile.stats.pending_orders_count }}</h2>
+          <p>Pedidos pendentes</p>
+        </article>
+      </section>
+      <div class="actions">
+        <details class="action-dropdown">
+          <summary class="action-dropdown-trigger">Acoes do usuario <span class="caret">&#9662;</span></summary>
+          <div class="action-dropdown-menu">
+            {% if su.subscription_status == "suspended" %}
+              <form method="post" action="{{ url_for('main.reactivate_user', user_id=su.id) }}" data-confirm-message="Reativar este usuario?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                <button type="submit" class="button-sm">Reativar</button>
+              </form>
+            {% else %}
+              <form method="post" action="{{ url_for('main.suspend_user', user_id=su.id) }}" data-confirm-message="Suspender este usuario?">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+                <button type="submit" class="button-sm button-muted">Suspender</button>
+              </form>
+            {% endif %}
+            <form method="post" action="{{ url_for('main.force_user_logout', user_id=su.id) }}" data-confirm-message="Forcar novo login para este usuario?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+              <button type="submit" class="button-sm">Forcar logout</button>
+            </form>
+            <form method="post" action="{{ url_for('main.reset_user_whatsapp_session', user_id=su.id) }}" data-confirm-message="Resetar sessao WhatsApp deste usuario?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+              <button type="submit" class="button-sm button-muted">Resetar WhatsApp</button>
+            </form>
+            <form method="post" action="{{ url_for('main.revoke_user_subscription', user_id=su.id) }}" data-confirm-message="Revogar assinatura deste usuario?">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="return_to" value="{{ admin_return_to }}">
+              <button type="submit" class="button-sm">Revogar assinatura</button>
+            </form>
+          </div>
+        </details>
+      </div>
+      <section class="grid two-cols">
+        <article>
+          <h4>Ultimas mensagens</h4>
+          {% if support_profile.recent_messages %}
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Fornecedor</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row, supplier_name in support_profile.recent_messages %}
+                    <tr>
+                      <td>{{ row.sent_at.strftime("%d/%m/%Y %H:%M") }}</td>
+                      <td>{{ supplier_name or "-" }}</td>
+                      <td>{{ row.status }}</td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p>Nenhum envio deste usuario.</p>
+          {% endif %}
+        </article>
+        <article>
+          <h4>Pedidos de assinatura</h4>
+          {% if support_profile.recent_orders %}
+            <div class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Plano</th>
+                    <th>Status</th>
+                    <th>Acoes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for order in support_profile.recent_orders %}
+                    <tr>
+                      <td>{{ order.created_at.strftime("%d/%m/%Y %H:%M") }}</td>
+                      <td>{{ order.plan_name }}</td>
+                      <td>{{ order.status }}</td>
+                      <td class="actions">
+                        {% if payment_test_mode and order.status == "pending" %}
+                          <form method="post" action="{{ url_for('main.admin_confirm_subscription_order', order_id=order.id) }}" data-confirm-message="Confirmar pagamento deste pedido em modo teste?">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="button-sm">Confirmar teste</button>
+                          </form>
+                        {% else %}
+                          <span class="meta">-</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% else %}
+            <p>Nenhum pedido encontrado.</p>
+          {% endif %}
+        </article>
+      </section>
+      <h4>Auditoria relacionada a este usuario</h4>
+      {% if support_profile.recent_audits %}
+        <ul class="template-list">
+          {% for log, admin_username in support_profile.recent_audits %}
+            <li>
+              <strong>{{ log.action }}</strong>
+              <div class="meta">{{ log.created_at.strftime("%d/%m/%Y %H:%M") }} | admin: {{ admin_username }} | {{ log.details or "-" }}</div>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>Nenhum evento de auditoria para este usuario.</p>
+      {% endif %}
+    {% else %}
+      <p>Selecione um usuario na busca para abrir esta visao de suporte.</p>
+    {% endif %}
+  </section>
+</section>
+
+<script>
+  (() => {
+    const buttons = Array.from(document.querySelectorAll("[data-admin-tab-btn]"));
+    const panels = Array.from(document.querySelectorAll("[data-admin-tab-panel]"));
+    if (!buttons.length || !panels.length) {
+      return;
+    }
+
+    const panelNames = new Set(panels.map((panel) => panel.dataset.adminTabPanel));
+    const url = new URL(window.location.href);
+
+    const activateTab = (tabName, syncUrl = true) => {
+      if (!panelNames.has(tabName)) {
+        return;
+      }
+      buttons.forEach((button) => {
+        const isActive = button.dataset.adminTabBtn === tabName;
+        button.classList.toggle("is-active", isActive);
+        button.setAttribute("aria-selected", isActive ? "true" : "false");
+      });
+      panels.forEach((panel) => {
+        panel.classList.toggle("is-active", panel.dataset.adminTabPanel === tabName);
+      });
+      if (syncUrl) {
+        url.searchParams.set("aba", tabName);
+        window.history.replaceState({}, "", url.toString());
+      }
+    };
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        activateTab(button.dataset.adminTabBtn);
+      });
+    });
+
+    const initialTab = url.searchParams.get("aba") || "overview";
+    activateTab(panelNames.has(initialTab) ? initialTab : "overview", false);
+  })();
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Historico | App Orcamentos{% endblock %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <h1>Historico de mensagens</h1>
+    <div class="head-actions">
+      <form method="post" action="{{ url_for('main.clear_history') }}" data-confirm-message="Tem certeza que deseja apagar todo o historico?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="danger button-sm">Limpar historico</button>
+      </form>
+      <a href="{{ url_for('main.export_history', status=status_filter) }}">Exportar CSV</a>
+      <a href="{{ url_for('main.messages') }}">Novo envio</a>
+    </div>
+  </div>
+
+  <form class="search" method="get">
+    <select name="status">
+      <option value="">Todos os status</option>
+      {% for status in statuses %}
+        <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>{{ status }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Filtrar</button>
+  </form>
+
+  {% if rows %}
+    <p class="meta">Pagina {{ pagination.page }} de {{ pagination.pages or 1 }} | Total: {{ pagination.total }}</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Fornecedor</th>
+            <th>Template</th>
+            <th>Status</th>
+            <th>Mensagem</th>
+            <th>Acoes</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for item in rows %}
+          <tr>
+            <td>{{ item.sent_at.strftime("%d/%m/%Y %H:%M") }}</td>
+            <td>{{ item.supplier.name }}</td>
+            <td>{{ item.template.name if item.template else "customizada" }}</td>
+            <td>{{ item.status }}</td>
+            <td><pre class="msg">{{ item.content }}</pre></td>
+            <td class="actions history-actions">
+              <form method="post" action="{{ url_for('main.delete_history_entry', history_id=item.id) }}" data-confirm-message="Excluir este registro do historico?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="status" value="{{ status_filter }}">
+                <input type="hidden" name="page" value="{{ pagination.page }}">
+                <button type="submit" class="danger button-sm">Excluir</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="pager">
+      {% if pagination.has_prev %}
+        <a href="{{ url_for('main.history', status=status_filter, page=pagination.prev_num) }}">Anterior</a>
+      {% endif %}
+      <span>Pagina {{ pagination.page }}</span>
+      {% if pagination.has_next %}
+        <a href="{{ url_for('main.history', status=status_filter, page=pagination.next_num) }}">Proxima</a>
+      {% endif %}
+    </div>
+  {% else %}
+    <p>Nenhuma mensagem registrada.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
