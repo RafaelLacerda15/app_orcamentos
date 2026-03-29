@@ -255,6 +255,13 @@ class WhatsAppSessionManager:
             return
 
         self._profile_dir.mkdir(parents=True, exist_ok=True)
+        browsers_path = (os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
+        if browsers_path:
+            browsers_dir = Path(browsers_path)
+            self._log(
+                "playwright_browsers_path_configured "
+                f"path={browsers_path} exists={browsers_dir.exists()}"
+            )
 
         if self._auto_install_chromium:
             if not self._install_chromium_if_needed():
@@ -272,6 +279,8 @@ class WhatsAppSessionManager:
             first_qr_logged = False
             last_preview_attempt_at = 0.0
             last_hint_attempt_at = 0.0
+            last_generic_qr_attempt_at = 0.0
+            last_container_qr_attempt_at = 0.0
             with sync_playwright() as playwright:
                 self._log("playwright_started")
                 launch_started_at = time.time()
@@ -326,7 +335,17 @@ class WhatsAppSessionManager:
                             )
                             self._log("connect_timeout_reached")
                             break
-                        qr_code = self._capture_qr_code(page)
+                        run_generic_qr_scan = (now - last_generic_qr_attempt_at) >= 6
+                        if run_generic_qr_scan:
+                            last_generic_qr_attempt_at = now
+                        run_container_qr_scan = (now - last_container_qr_attempt_at) >= 10
+                        if run_container_qr_scan:
+                            last_container_qr_attempt_at = now
+                        qr_code = self._capture_qr_code(
+                            page,
+                            include_generic=run_generic_qr_scan,
+                            include_container=run_container_qr_scan,
+                        )
                         if qr_code:
                             if not first_qr_logged:
                                 first_qr_logged = True
@@ -505,9 +524,14 @@ class WhatsAppSessionManager:
         return False
 
     @staticmethod
-    def _capture_qr_code(page) -> str | None:
+    def _capture_qr_code(
+        page,
+        *,
+        include_generic: bool = False,
+        include_container: bool = False,
+    ) -> str | None:
         # 1) Tentativa direta em elementos de QR (canvas/img) para obter imagem limpa.
-        qr_selectors = (
+        qr_selectors: list[str] = [
             "canvas[aria-label*='Scan']",
             "canvas[aria-label*='Escanear']",
             "div[data-ref] canvas",
@@ -515,26 +539,25 @@ class WhatsAppSessionManager:
             "img[alt*='QR']",
             "img[alt*='Qr']",
             "img[src*='data:image']",
-            "canvas",
-            "img",
-        )
+        ]
+        if include_generic:
+            qr_selectors.extend(["canvas", "img"])
         for selector in qr_selectors:
             data_url = WhatsAppSessionManager._capture_element_as_data_url(page, selector)
             if data_url:
                 return data_url
 
-        # 2) Fallback: captura do container onde geralmente o QR aparece.
-        container_selectors = (
-            "[data-testid='qrcode']",
-            "div[data-ref]",
-            "div[role='img']",
-            "main",
-            "body",
-        )
-        for selector in container_selectors:
-            data_url = WhatsAppSessionManager._capture_element_as_data_url(page, selector)
-            if data_url:
-                return data_url
+        # 2) Fallback eventual: captura de containers de QR.
+        if include_container:
+            container_selectors = (
+                "[data-testid='qrcode']",
+                "div[data-ref]",
+                "div[role='img']",
+            )
+            for selector in container_selectors:
+                data_url = WhatsAppSessionManager._capture_element_as_data_url(page, selector)
+                if data_url:
+                    return data_url
 
         return None
 
@@ -614,7 +637,7 @@ class WhatsAppSessionManager:
                 box = element.bounding_box()
                 if not box:
                     continue
-                if box.get("width", 0) < 120 or box.get("height", 0) < 120:
+                if box.get("width", 0) < 80 or box.get("height", 0) < 80:
                     continue
 
                 png = element.screenshot(type="png")

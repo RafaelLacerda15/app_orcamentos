@@ -2,7 +2,7 @@ services:
   - type: web
     name: app-orcamentos
     env: python
-    buildCommand: pip install -r requirements.txt && python -m playwright install chromium
+    buildCommand: pip install -r requirements.txt && mkdir -p /opt/render/project/.cache/ms-playwright && PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/.cache/ms-playwright python -m playwright install chromium
     startCommand: gunicorn main:app --workers 1 --threads 4 --bind 0.0.0.0:${PORT:-1000}
     envVars:
       - key: PYTHON_VERSION
@@ -11,6 +11,8 @@ services:
         generateValue: true
       - key: APP_ENV
         value: production
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/.cache/ms-playwright
       - key: WHATSAPP_PLAYWRIGHT_NO_SANDBOX
         value: "1"
       - key: WHATSAPP_PLAYWRIGHT_USE_CHROME_CHANNEL
