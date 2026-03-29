@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from html import escape
 from urllib.parse import quote
 from pathlib import Path
 from typing import Any
@@ -231,6 +232,9 @@ class WhatsAppSessionManager:
                 page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded", timeout=120_000)
 
                 while not self._stop_event.is_set():
+                    if page.is_closed():
+                        self._set_error("Navegador do WhatsApp foi encerrado inesperadamente.")
+                        break
                     if self._is_browser_rejected(page):
                         self._set_error(
                             "WhatsApp Web rejeitou o navegador automatizado. "
@@ -265,7 +269,25 @@ class WhatsAppSessionManager:
                                     qr_code=preview,
                                 )
                             else:
-                                self._set_state("connecting", "Carregando WhatsApp Web...")
+                                page_hint = self._extract_page_hint(page)
+                                if page_hint:
+                                    if (
+                                        "works with google chrome" in page_hint.lower()
+                                        or "browser is not supported" in page_hint.lower()
+                                        or "navegador nao e suportado" in page_hint.lower()
+                                    ):
+                                        self._set_error(
+                                            "WhatsApp Web bloqueou o navegador neste ambiente da Render. "
+                                            "Use um servidor com Chrome dedicado ou outro provedor de envio."
+                                        )
+                                        break
+                                    self._set_state(
+                                        "waiting_qr",
+                                        f"Aguardando QR Code. Tela atual: {page_hint[:150]}",
+                                        qr_code=self._build_status_placeholder_image(page_hint),
+                                    )
+                                else:
+                                    self._set_state("connecting", "Carregando WhatsApp Web...")
                     self._process_send_requests(page, is_connected=is_connected)
                     if is_connected:
                         # Sessao conectada: resposta mais rapida para envios enfileirados.
@@ -426,6 +448,30 @@ class WhatsAppSessionManager:
         if len(encoded) < 256:
             return None
         return f"data:image/png;base64,{encoded}"
+
+    @staticmethod
+    def _extract_page_hint(page) -> str | None:
+        try:
+            body_text = page.locator("body").inner_text(timeout=1_500).strip()
+        except Exception:
+            return None
+        if not body_text:
+            return None
+        compact = " ".join(body_text.split())
+        return compact[:260]
+
+    @staticmethod
+    def _build_status_placeholder_image(message: str) -> str:
+        safe_message = escape((message or "Aguardando WhatsApp Web...")[:220])
+        svg = (
+            "<svg xmlns='http://www.w3.org/2000/svg' width='900' height='560'>"
+            "<rect width='100%' height='100%' fill='#f5f0e6'/>"
+            "<rect x='18' y='18' width='864' height='524' rx='16' fill='#fffef9' stroke='#d8c9af' stroke-width='2'/>"
+            "<text x='40' y='80' fill='#3e3a33' font-size='30' font-family='Arial, sans-serif' font-weight='700'>WhatsApp Web (Render)</text>"
+            f"<text x='40' y='130' fill='#625a4e' font-size='23' font-family='Arial, sans-serif'>{safe_message}</text>"
+            "</svg>"
+        )
+        return f"data:image/svg+xml;charset=utf-8,{quote(svg)}"
 
     @staticmethod
     def _capture_element_as_data_url(page, selector: str) -> str | None:
