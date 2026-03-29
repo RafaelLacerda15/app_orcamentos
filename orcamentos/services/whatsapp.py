@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import base64
+import os
 import queue
 import random
 import re
@@ -286,6 +287,19 @@ class WhatsAppSessionManager:
             "--no-default-browser-check",
             "--no-first-run",
         ]
+        no_sandbox_enabled = (os.getenv("WHATSAPP_PLAYWRIGHT_NO_SANDBOX") or "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if no_sandbox_enabled:
+            launch_args.extend(
+                [
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                ]
+            )
         common_kwargs = {
             "user_data_dir": str(self._profile_dir),
             "headless": True,
