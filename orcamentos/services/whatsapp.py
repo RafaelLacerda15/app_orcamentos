@@ -316,16 +316,28 @@ class WhatsAppSessionManager:
             "args": launch_args,
             "user_agent": WHATSAPP_MODERN_USER_AGENT,
             "locale": "pt-BR",
+            "timeout": 45_000,
         }
 
-        # Primeiro tenta usar o Chrome instalado na maquina (mais compativel com WhatsApp Web).
-        try:
-            return playwright.chromium.launch_persistent_context(
-                channel="chrome",
-                **common_kwargs,
-            )
-        except Exception:
-            return playwright.chromium.launch_persistent_context(**common_kwargs)
+        use_chrome_channel_env = (os.getenv("WHATSAPP_PLAYWRIGHT_USE_CHROME_CHANNEL") or "").strip().lower()
+        if use_chrome_channel_env in {"0", "false", "no", "off"}:
+            use_chrome_channel = False
+        elif use_chrome_channel_env in {"1", "true", "yes", "on"}:
+            use_chrome_channel = True
+        else:
+            # Em Linux (Render), prioriza o Chromium do Playwright.
+            use_chrome_channel = sys.platform.startswith("win")
+
+        if use_chrome_channel:
+            try:
+                return playwright.chromium.launch_persistent_context(
+                    channel="chrome",
+                    **common_kwargs,
+                )
+            except Exception:
+                pass
+
+        return playwright.chromium.launch_persistent_context(**common_kwargs)
 
     @staticmethod
     def _open_fresh_whatsapp_page(browser_context):

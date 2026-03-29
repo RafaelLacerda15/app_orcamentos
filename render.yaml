@@ -3,7 +3,7 @@ services:
     name: app-orcamentos
     env: python
     buildCommand: pip install -r requirements.txt && python -m playwright install chromium
-    startCommand: gunicorn main:app --bind 0.0.0.0:$PORT
+    startCommand: gunicorn main:app --workers 1 --threads 4 --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11
@@ -13,6 +13,8 @@ services:
         value: production
       - key: WHATSAPP_PLAYWRIGHT_NO_SANDBOX
         value: "1"
+      - key: WHATSAPP_PLAYWRIGHT_USE_CHROME_CHANNEL
+        value: "0"
       - key: DATABASE_URL
         fromDatabase:
           name: app-orcamentos-db
