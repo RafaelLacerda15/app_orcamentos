@@ -6,71 +6,36 @@
     <h1>Cadastro</h1>
   </div>
 
-  {% if verification_pending %}
-    <p class="meta">Enviamos um codigo para <strong>{{ verification_email_masked }}</strong>.</p>
-    <form method="post" class="form-grid">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="action" value="verify_code">
-      <label class="full">
-        Codigo de verificacao
-        <input
-          name="verification_code"
-          inputmode="numeric"
-          pattern="[0-9]+"
-          minlength="{{ verification_code_length or 6 }}"
-          maxlength="{{ verification_code_length or 6 }}"
-          required
-          autofocus
-        >
-      </label>
-      <div class="full actions">
-        <button class="button" type="submit">Confirmar codigo</button>
-      </div>
-    </form>
-
-    <form method="post" class="form-grid">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="action" value="resend_code">
-      <div class="full actions">
-        <button class="button-muted" type="submit">Reenviar codigo</button>
-        <a href="{{ url_for('main.login') }}">Ja tenho conta</a>
-      </div>
-    </form>
-  {% else %}
-    <form method="post" class="form-grid">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="action" value="start">
-      <label class="full">
-        Usuario
-        <input name="username" required minlength="3" autofocus value="{{ form_data.username if form_data else '' }}">
-      </label>
-      <label class="full">
-        Email
-        <input name="email" type="email" required value="{{ form_data.email if form_data else '' }}">
-      </label>
-      <label class="full">
-        Telefone
-        <input name="phone" required placeholder="(11) 99999-9999" value="{{ form_data.phone if form_data else '' }}">
-      </label>
-      <label class="full">
-        CPF / CNPJ
-        <input name="tax_id" required placeholder="Somente números" maxlength="18"
-          value="{{ form_data.tax_id if form_data else '' }}">
-      </label>
-      <label class="full">
-        Senha
-        <input name="password" type="password" required minlength="6">
-      </label>
-      <label class="full">
-        Confirmar senha
-        <input name="confirm_password" type="password" required minlength="6">
-      </label>
-      <div class="full">
-        <button class="button" type="submit">Criar conta</button>
-        <a href="{{ url_for('main.login') }}">Ja tenho conta</a>
-      </div>
-    </form>
-  {% endif %}
+  <form method="post" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="full">
+      Usuario
+      <input name="username" required minlength="3" autofocus value="{{ form_data.username if form_data else '' }}">
+    </label>
+    <label class="full">
+      Email
+      <input name="email" type="email" required value="{{ form_data.email if form_data else '' }}">
+    </label>
+    <label class="full">
+      Telefone
+      <input name="phone" required placeholder="(11) 99999-9999" value="{{ form_data.phone if form_data else '' }}">
+    </label>
+    <label class="full">
+      CPF / CNPJ
+      <input name="tax_id" required placeholder="Somente numeros" maxlength="18" value="{{ form_data.tax_id if form_data else '' }}">
+    </label>
+    <label class="full">
+      Senha
+      <input name="password" type="password" required minlength="6">
+    </label>
+    <label class="full">
+      Confirmar senha
+      <input name="confirm_password" type="password" required minlength="6">
+    </label>
+    <div class="full">
+      <button class="button" type="submit">Criar conta</button>
+      <a href="{{ url_for('main.login') }}">Ja tenho conta</a>
+    </div>
+  </form>
 </section>
 {% endblock %}
-

@@ -62,6 +62,22 @@ def _env_bool(name: str, fallback: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _normalize_database_url(database_url: str) -> str:
+    normalized_url = database_url.strip()
+    if normalized_url.startswith("postgres://"):
+        normalized_url = normalized_url.replace("postgres://", "postgresql://", 1)
+    if normalized_url.startswith("postgresql://"):
+        normalized_url = normalized_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return normalized_url
+
+
+def _database_uri() -> str:
+    database_url = _env_value("DATABASE_URL")
+    if not database_url:
+        return "sqlite:///orcamentos.db"
+    return _normalize_database_url(database_url)
+
+
 def _ensure_master_admin() -> None:
     master_username, master_password, master_email = _master_credentials()
     if not master_username or not master_password or not master_email:
@@ -210,7 +226,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config.update(
         APP_ENV=app_mode,
         SECRET_KEY=secret_key,
-        SQLALCHEMY_DATABASE_URI=os.getenv("DATABASE_URL", "sqlite:///orcamentos.db"),
+        SQLALCHEMY_DATABASE_URI=_database_uri(),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SESSION_COOKIE_NAME="app_orcamentos_session",
         SESSION_COOKIE_HTTPONLY=True,

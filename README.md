@@ -30,7 +30,13 @@ pip install -e .
 python main.py
 ```
 
-Acesse: `http://127.0.0.1:5000`
+Acesse: `http://127.0.0.1:8000`
+
+Para executar com Gunicorn:
+
+```bash
+gunicorn main:app --bind 0.0.0.0:8000
+```
 
 Para usar envio real por WhatsApp com PyWhatKit:
 
@@ -71,6 +77,18 @@ Para PostgreSQL, configure:
 ```bash
 set DATABASE_URL=postgresql+psycopg://usuario:senha@localhost:5432/orcamentos
 ```
+
+Se a URL vier como `postgres://...` (caso comum em PaaS), o app converte automaticamente para o formato suportado.
+
+## Deploy na Render
+
+O repositorio agora inclui:
+
+- `requirements.txt`
+- `Procfile`
+- `render.yaml` (web service + PostgreSQL)
+
+Usando Blueprint (`render.yaml`), a Render cria o banco PostgreSQL e injeta `DATABASE_URL` automaticamente no web service.
 
 ## Testes
 

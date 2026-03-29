@@ -52,7 +52,6 @@ LOGIN_WINDOW_SECONDS = 300
 LOGIN_MAX_ATTEMPTS = 5
 LOGIN_LOCK_SECONDS = 900
 _LOGIN_ATTEMPTS: dict[str, dict[str, float | int]] = {}
-REGISTRATION_VERIFICATION_SESSION_KEY = "registration_verification_id"
 PASSWORD_RESET_VERIFICATION_SESSION_KEY = "password_reset_verification_id"
 
 PLAN_FEATURES: dict[str, dict[str, int | bool | None]] = {
@@ -674,25 +673,6 @@ def _mask_email(email: str) -> str:
     return f"{masked_local}@{domain}"
 
 
-def _get_registration_verification() -> SignupVerification | None:
-    verification_id = session.get(REGISTRATION_VERIFICATION_SESSION_KEY)
-    if not verification_id:
-        return None
-
-    verification = SignupVerification.query.filter_by(id=verification_id).first()
-    if verification is None:
-        session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-        return None
-
-    if verification.expires_at < server_now():
-        db.session.delete(verification)
-        db.session.commit()
-        session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-        return None
-
-    return verification
-
-
 def _register_form_payload() -> dict[str, str]:
     return {
         "username": request.form.get("username", "").strip(),
@@ -703,25 +683,8 @@ def _register_form_payload() -> dict[str, str]:
     }
 
 
-def _render_register(
-    form_data: dict[str, str] | None = None,
-    verification: SignupVerification | None = None,
-):
-    pending = verification is not None
-    data = form_data or {}
-    if pending:
-        data = {
-            "username": verification.username,
-            "email": verification.email,
-            "phone": verification.phone,
-        }
-    return render_template(
-        "register.html",
-        form_data=data,
-        verification_pending=pending,
-        verification_email_masked=_mask_email(verification.email) if verification else None,
-        verification_code_length=_registration_code_length(),
-    )
+def _render_register(form_data: dict[str, str] | None = None):
+    return render_template("register.html", form_data=form_data or {})
 
 
 def _get_password_reset_verification() -> PasswordResetVerification | None:
@@ -986,121 +949,7 @@ def register():
     if getattr(g, "member_user", None):
         return redirect(url_for("main.dashboard"))
 
-    verification = _get_registration_verification()
-
     if request.method == "POST":
-        action = request.form.get("action", "start").strip().lower()
-
-        if action == "verify_code":
-            if verification is None:
-                flash("Solicite um codigo primeiro.", "error")
-                return _render_register(form_data=_register_form_payload())
-
-            code = request.form.get("verification_code", "").strip()
-            code_length = _registration_code_length()
-            max_attempts = _registration_max_attempts()
-            if not code.isdigit() or len(code) != code_length:
-                flash(f"Informe um codigo de {code_length} digitos.", "error")
-                return _render_register(verification=verification)
-
-            if verification.attempts >= max_attempts:
-                db.session.delete(verification)
-                db.session.commit()
-                session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-                flash("Limite de tentativas excedido. Solicite um novo codigo.", "error")
-                return _render_register()
-
-            if not check_password_hash(verification.code_hash, code):
-                verification.attempts += 1
-                db.session.commit()
-                remaining = max(max_attempts - verification.attempts, 0)
-                if remaining == 0:
-                    db.session.delete(verification)
-                    db.session.commit()
-                    session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-                    flash("Codigo invalido e limite de tentativas excedido. Refaça o cadastro.", "error")
-                    return _render_register()
-                flash(f"Codigo invalido. Tentativas restantes: {remaining}.", "error")
-                return _render_register(verification=verification)
-
-            username_exists = User.query.filter(func.lower(User.username) == verification.username.lower()).first()
-            if username_exists:
-                db.session.delete(verification)
-                db.session.commit()
-                session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-                flash("Nome de usuario ja cadastrado. Tente outro.", "error")
-                return _render_register()
-
-            email_exists = User.query.filter(func.lower(User.email) == verification.email.lower()).first()
-            if email_exists:
-                db.session.delete(verification)
-                db.session.commit()
-                session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-                flash("Email ja cadastrado. Tente outro.", "error")
-                return _render_register()
-
-            phone_exists = User.query.filter(User.phone == verification.phone).first()
-            if phone_exists:
-                db.session.delete(verification)
-                db.session.commit()
-                session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-                flash("Telefone ja cadastrado. Use outro numero.", "error")
-                return _render_register()
-
-            is_first_user = User.query.count() == 0
-            user = User(
-                username=verification.username,
-                email=verification.email,
-                phone=verification.phone,
-                tax_id=verification.tax_id,
-                phone_verified=False,
-                is_admin=is_first_user,
-            )
-            user.password_hash = verification.password_hash
-            trial_start = server_now()
-            user.subscription_status = "active"
-            user.subscription_started_at = trial_start
-            user.subscription_expires_at = trial_start + timedelta(days=15)
-            db.session.add(user)
-            db.session.delete(verification)
-            try:
-                db.session.commit()
-            except IntegrityError:
-                db.session.rollback()
-                session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-                flash("Nao foi possivel concluir o cadastro. Verifique os dados e tente novamente.", "error")
-                return _render_register()
-
-            session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-            session[SESSION_MEMBER_KEY] = user.id
-            session[SESSION_MEMBER_LOGIN_AT_KEY] = server_now().timestamp()
-            if is_first_user:
-                flash("Conta criada. Voce e o administrador inicial com teste de 15 dias ativo.", "success")
-            else:
-                flash("Conta criada com sucesso. Seu teste de 15 dias ja esta ativo.", "success")
-            return redirect(url_for("main.dashboard"))
-
-        if action == "resend_code":
-            if verification is None:
-                flash("Solicite um codigo primeiro.", "error")
-                return _render_register(form_data=_register_form_payload())
-
-            code = _generate_numeric_code(_registration_code_length())
-            verification.code_hash = generate_password_hash(code)
-            verification.expires_at = server_now() + timedelta(minutes=_registration_code_ttl_minutes())
-            verification.attempts = 0
-            db.session.commit()
-
-            sent, preview_code = send_verification_code_email(verification.email, code)
-            if not sent:
-                flash("Nao foi possivel reenviar o email agora. Tente novamente em instantes.", "error")
-                return _render_register(verification=verification)
-
-            flash("Codigo reenviado por email.", "success")
-            if preview_code:
-                flash(f"Codigo (modo teste): {preview_code}", "success")
-            return _render_register(verification=verification)
-
         form_data = _register_form_payload()
         username = form_data["username"]
         email = form_data["email"]
@@ -1148,49 +997,37 @@ def register():
             flash("Telefone ja cadastrado.", "error")
             return _render_register(form_data=form_data)
 
-        old_verification = _get_registration_verification()
-        if old_verification is not None:
-            db.session.delete(old_verification)
-            db.session.commit()
-            session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-
-        SignupVerification.query.filter(
-            or_(
-                func.lower(SignupVerification.username) == username.lower(),
-                func.lower(SignupVerification.email) == email.lower(),
-                SignupVerification.phone == normalized_phone,
-            )
-        ).delete(synchronize_session=False)
-
-        code = _generate_numeric_code(_registration_code_length())
-        verification = SignupVerification(
+        is_first_user = User.query.count() == 0
+        user = User(
             username=username,
             email=email,
             phone=normalized_phone,
             tax_id=tax_id_clean,
-            password_hash=generate_password_hash(password),
-            code_hash=generate_password_hash(code),
-            expires_at=server_now() + timedelta(minutes=_registration_code_ttl_minutes()),
-            attempts=0,
+            phone_verified=False,
+            is_admin=is_first_user,
         )
-        db.session.add(verification)
-        db.session.commit()
-        session[REGISTRATION_VERIFICATION_SESSION_KEY] = verification.id
-
-        sent, preview_code = send_verification_code_email(email, code)
-        if not sent:
-            db.session.delete(verification)
+        user.set_password(password)
+        trial_start = server_now()
+        user.subscription_status = "active"
+        user.subscription_started_at = trial_start
+        user.subscription_expires_at = trial_start + timedelta(days=15)
+        db.session.add(user)
+        try:
             db.session.commit()
-            session.pop(REGISTRATION_VERIFICATION_SESSION_KEY, None)
-            flash("Nao foi possivel enviar o email de verificacao. Tente novamente.", "error")
+        except IntegrityError:
+            db.session.rollback()
+            flash("Nao foi possivel concluir o cadastro. Verifique os dados e tente novamente.", "error")
             return _render_register(form_data=form_data)
 
-        flash(f"Codigo de {_registration_code_length()} digitos enviado por email. Digite para concluir o cadastro.", "success")
-        if preview_code:
-            flash(f"Codigo (modo teste): {preview_code}", "success")
-        return _render_register(verification=verification)
+        session[SESSION_MEMBER_KEY] = user.id
+        session[SESSION_MEMBER_LOGIN_AT_KEY] = server_now().timestamp()
+        if is_first_user:
+            flash("Conta criada. Voce e o administrador inicial com teste de 15 dias ativo.", "success")
+        else:
+            flash("Conta criada com sucesso. Seu teste de 15 dias ja esta ativo.", "success")
+        return redirect(url_for("main.dashboard"))
 
-    return _render_register(verification=verification)
+    return _render_register()
 
 
 @bp.post("/logout")
@@ -3393,4 +3230,3 @@ def webhook_abacatepay():
     db.session.commit()
 
     return jsonify({"ok": True}), 200
-

@@ -522,6 +522,8 @@ def test_register_creates_regular_user_and_logs_in(client, app):
         data={
             "username": "rafa",
             "email": "rafa@teste.com",
+            "phone": "(11) 99888-7766",
+            "tax_id": "12345678901",
             "password": "123456",
             "confirm_password": "123456",
         },
