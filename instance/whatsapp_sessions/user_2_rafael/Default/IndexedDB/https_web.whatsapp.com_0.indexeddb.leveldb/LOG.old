@@ -1,3 +1,14 @@
-2026/03/10-17:51:12.699 1324 Reusing MANIFEST C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
-2026/03/10-17:51:12.700 1324 Recovering log #104
-2026/03/10-17:51:12.785 1324 Reusing old log C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000104.log 
+2026/03/10-17:54:37.909 4e5c Reusing MANIFEST C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/03/10-17:54:37.910 4e5c Recovering log #104
+2026/03/10-17:54:38.004 4e5c Reusing old log C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000104.log 
+2026/03/10-17:54:39.867 4318 Level-0 table #113: started
+2026/03/10-17:54:39.970 4318 Level-0 table #113: 1271131 bytes OK
+2026/03/10-17:54:39.975 4318 Delete type=0 #104
+2026/03/10-17:54:40.675 4e5c Compacting 1@1 + 5@2 files
+2026/03/10-17:54:40.821 4e5c Generated table #114@1: 43357 keys, 2212928 bytes
+2026/03/10-17:54:40.899 4e5c Generated table #115@1: 2619 keys, 2154843 bytes
+2026/03/10-17:54:41.014 4e5c Generated table #116@1: 17328 keys, 2208406 bytes
+2026/03/10-17:54:41.122 4e5c Generated table #117@1: 42902 keys, 2203006 bytes
+2026/03/10-17:54:41.286 4e5c Generated table #118@1: 89963 keys, 2024267 bytes
+2026/03/10-17:54:41.286 4e5c Compacted 1@1 + 5@2 files => 10803450 bytes
+2026/03/10-17:54:41.287 4e5c compacted to: files[ 0 0 5 0 0 0 0 ]

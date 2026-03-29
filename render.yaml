@@ -3,7 +3,7 @@ services:
     name: app-orcamentos
     env: python
     buildCommand: pip install -r requirements.txt && python -m playwright install chromium
-    startCommand: gunicorn main:app --workers 1 --threads 4 --bind 0.0.0.0:$PORT
+    startCommand: gunicorn main:app --workers 1 --threads 4 --bind 0.0.0.0:${PORT:-1000}
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.11

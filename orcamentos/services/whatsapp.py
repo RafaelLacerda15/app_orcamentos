@@ -257,7 +257,15 @@ class WhatsAppSessionManager:
                         if qr_code:
                             self._set_state("waiting_qr", "Escaneie o QR Code com seu celular.", qr_code=qr_code)
                         else:
-                            self._set_state("connecting", "Carregando WhatsApp Web...")
+                            preview = self._capture_page_preview(page)
+                            if preview:
+                                self._set_state(
+                                    "waiting_qr",
+                                    "Aguardando QR Code. Se nao aparecer em instantes, clique em desconectar e tente novamente.",
+                                    qr_code=preview,
+                                )
+                            else:
+                                self._set_state("connecting", "Carregando WhatsApp Web...")
                     self._process_send_requests(page, is_connected=is_connected)
                     if is_connected:
                         # Sessao conectada: resposta mais rapida para envios enfileirados.
@@ -296,6 +304,9 @@ class WhatsAppSessionManager:
             "--disable-blink-features=AutomationControlled",
             "--no-default-browser-check",
             "--no-first-run",
+            "--disable-gpu",
+            "--disable-software-rasterizer",
+            "--no-zygote",
         ]
         no_sandbox_enabled = (os.getenv("WHATSAPP_PLAYWRIGHT_NO_SANDBOX") or "1").strip().lower() in {
             "1",
@@ -402,6 +413,19 @@ class WhatsAppSessionManager:
                 return data_url
 
         return None
+
+    @staticmethod
+    def _capture_page_preview(page) -> str | None:
+        try:
+            png = page.screenshot(type="png", full_page=False)
+        except Exception:
+            return None
+        if not png:
+            return None
+        encoded = base64.b64encode(png).decode("ascii")
+        if len(encoded) < 256:
+            return None
+        return f"data:image/png;base64,{encoded}"
 
     @staticmethod
     def _capture_element_as_data_url(page, selector: str) -> str | None:

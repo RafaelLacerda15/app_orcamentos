@@ -1,5 +1,8 @@
-2026/03/10-17:54:36.950 6140 Reusing MANIFEST C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\Local Storage\leveldb/MANIFEST-000001
-2026/03/10-17:54:36.962 6140 Recovering log #4
-2026/03/10-17:54:36.968 6140 Reusing old log C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\Local Storage\leveldb/000004.log 
-2026/03/10-17:55:16.924 6140 Level-0 table #7: started
-2026/03/10-17:55:16.935 6140 Level-0 table #7: 15945 bytes OK
+2026/03/29-18:37:29.477 2030 Reusing MANIFEST C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\Local Storage\leveldb/MANIFEST-000001
+2026/03/29-18:37:29.482 2030 Recovering log #4
+2026/03/29-18:37:29.483 2030 Level-0 table #6: started
+2026/03/29-18:37:29.503 2030 Level-0 table #6: 15945 bytes OK
+2026/03/29-18:37:29.504 2030 Recovering log #6
+2026/03/29-18:37:29.513 2030 Reusing old log C:\Users\rafae\OneDrive\Documentos\projects_python\App Orçamentos\instance\whatsapp_sessions\user_2_rafael\Default\Local Storage\leveldb/000006.log 
+2026/03/29-18:37:29.525 2030 Delete type=0 #4
+2026/03/29-18:37:29.526 2030 Delete type=2 #7
