@@ -27,6 +27,7 @@ class WhatsAppSessionManager:
         self,
         profile_dir: Path,
         *,
+        connect_timeout_seconds: int = 180,
         send_min_interval_seconds: float = 1.0,
         send_max_interval_seconds: float = 1.8,
         send_burst_size: int = 10,
@@ -39,6 +40,7 @@ class WhatsAppSessionManager:
         self._worker: threading.Thread | None = None
         self._install_process: subprocess.Popen[str] | None = None
         self._send_requests: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._connect_timeout_seconds = max(int(connect_timeout_seconds or 0), 30)
         self._send_min_interval_seconds = max(send_min_interval_seconds, 0.0)
         self._send_max_interval_seconds = max(send_max_interval_seconds, self._send_min_interval_seconds)
         self._send_burst_size = max(send_burst_size, 0)
@@ -89,16 +91,7 @@ class WhatsAppSessionManager:
         worker = self._worker
         if worker and worker.is_alive():
             worker.join(timeout=5)
-        with self._lock:
-            self._state.update(
-                {
-                    "status": "disconnected",
-                    "message": "WhatsApp desconectado.",
-                    "qr_code": None,
-                    "running": False,
-                    "updated_at": time.time(),
-                }
-            )
+        self._set_disconnected("WhatsApp desconectado.")
 
     def get_state(self) -> dict[str, Any]:
         with self._lock:
@@ -127,6 +120,21 @@ class WhatsAppSessionManager:
             self._state.update(
                 {
                     "status": "error",
+                    "message": message,
+                    "qr_code": None,
+                    "running": False,
+                    "profile_dir": str(self._profile_dir),
+                    "session_persistent": True,
+                    "session_saved": self._profile_dir.exists(),
+                    "updated_at": time.time(),
+                }
+            )
+
+    def _set_disconnected(self, message: str) -> None:
+        with self._lock:
+            self._state.update(
+                {
+                    "status": "disconnected",
                     "message": message,
                     "qr_code": None,
                     "running": False,
@@ -215,6 +223,8 @@ class WhatsAppSessionManager:
 
         try:
             self._set_state("connecting", "Abrindo WhatsApp Web...")
+            connect_started_at = time.time()
+            has_connected_once = False
             with sync_playwright() as playwright:
                 browser_context = self._launch_compatible_context(playwright)
                 page = self._open_fresh_whatsapp_page(browser_context)
@@ -229,8 +239,20 @@ class WhatsAppSessionManager:
                         break
                     is_connected = self._is_connected(page)
                     if is_connected:
+                        has_connected_once = True
+                    if is_connected:
                         self._set_state("connected", "Conectado ao WhatsApp.")
                     else:
+                        if (
+                            not has_connected_once
+                            and self._connect_timeout_seconds > 0
+                            and (time.time() - connect_started_at) >= self._connect_timeout_seconds
+                        ):
+                            timeout_minutes = max(1, self._connect_timeout_seconds // 60)
+                            self._set_disconnected(
+                                f"Tempo limite de {timeout_minutes} minuto(s) para conectar. Sessao encerrada."
+                            )
+                            break
                         qr_code = self._capture_qr_code(page)
                         if qr_code:
                             self._set_state("waiting_qr", "Escaneie o QR Code com seu celular.", qr_code=qr_code)
@@ -257,19 +279,7 @@ class WhatsAppSessionManager:
                 except Exception:
                     pass
             if self._stop_event.is_set():
-                with self._lock:
-                    self._state.update(
-                        {
-                            "status": "disconnected",
-                            "message": "WhatsApp desconectado.",
-                            "qr_code": None,
-                            "running": False,
-                            "profile_dir": str(self._profile_dir),
-                            "session_persistent": True,
-                            "session_saved": self._profile_dir.exists(),
-                            "updated_at": time.time(),
-                        }
-                    )
+                self._set_disconnected("WhatsApp desconectado.")
             else:
                 with self._lock:
                     if self._state.get("status") != "error":

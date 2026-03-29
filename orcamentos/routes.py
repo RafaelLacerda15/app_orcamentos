@@ -554,6 +554,7 @@ def _get_whatsapp_manager() -> WhatsAppSessionManager:
     profile_dir = Path(current_app.instance_path) / "whatsapp_sessions" / manager_key
     manager = WhatsAppSessionManager(
         profile_dir=profile_dir,
+        connect_timeout_seconds=_int_config("WHATSAPP_CONNECT_TIMEOUT_SECONDS", 180, minimum=30, maximum=3600),
         send_min_interval_seconds=_float_config("WHATSAPP_SEND_MIN_INTERVAL_SECONDS", 1.0, minimum=0.0, maximum=30.0),
         send_max_interval_seconds=_float_config("WHATSAPP_SEND_MAX_INTERVAL_SECONDS", 1.8, minimum=0.0, maximum=45.0),
         send_burst_size=_int_config("WHATSAPP_SEND_BURST_SIZE", 10, minimum=0, maximum=100),

@@ -83,6 +83,7 @@
     const qrPreviewModal = document.getElementById("qr-preview-modal");
     const qrPreviewImage = document.getElementById("qr-preview-image");
     const qrPreviewClose = document.getElementById("qr-preview-close");
+    const startIdleLabel = "Iniciar login WhatsApp";
 
     const sessionStatusMap = {
       connected: { label: "Conectado", className: "status-connected" },
@@ -92,10 +93,27 @@
       error: { label: "Erro", className: "status-error" },
     };
 
-    function setLoading(button, loading, labelWhenIdle) {
-      if (!button) return;
-      button.disabled = loading;
-      button.textContent = loading ? "Processando..." : labelWhenIdle;
+    function syncStartButtonByState(normalizedStatus) {
+      const isConnected = normalizedStatus === "connected";
+      const isConnecting = normalizedStatus === "connecting" || normalizedStatus === "waiting_qr";
+
+      if (isConnected) {
+        startButton.classList.remove("danger");
+        startButton.textContent = "Conectado";
+        startButton.disabled = true;
+        return;
+      }
+
+      if (isConnecting) {
+        startButton.classList.add("danger");
+        startButton.textContent = "Conectando";
+        startButton.disabled = false;
+        return;
+      }
+
+      startButton.classList.remove("danger");
+      startButton.textContent = startIdleLabel;
+      startButton.disabled = false;
     }
 
     function applySessionState(state) {
@@ -105,6 +123,7 @@
       statusEl.textContent = mapped.label;
       statusEl.className = "status-pill " + mapped.className;
       messageEl.textContent = state && state.message ? state.message : "Sem informacoes.";
+      syncStartButtonByState(normalized);
 
       if (state && state.qr_code) {
         qrImageEl.src = state.qr_code;
@@ -150,8 +169,7 @@
       }
     }
 
-    async function postAction(url, button, idleLabel) {
-      setLoading(button, true, idleLabel);
+    async function postAction(url) {
       try {
         const response = await fetch(url, {
           method: "POST",
@@ -164,17 +182,17 @@
         applySessionState(await response.json());
       } catch (_error) {
         applySessionState({ status: "error", message: "Erro ao executar a acao." });
-      } finally {
-        setLoading(button, false, idleLabel);
       }
     }
 
     startButton.addEventListener("click", () => {
-      postAction("{{ url_for('main.start_whatsapp_session') }}", startButton, "Iniciar login WhatsApp");
+      syncStartButtonByState("connecting");
+      messageEl.textContent = "Iniciando sessao do WhatsApp Web...";
+      postAction("{{ url_for('main.start_whatsapp_session') }}");
     });
 
     stopButton.addEventListener("click", () => {
-      postAction("{{ url_for('main.stop_whatsapp_session') }}", stopButton, "Desconectar sessao");
+      postAction("{{ url_for('main.stop_whatsapp_session') }}");
     });
 
     qrImageEl.addEventListener("click", openQrPreview);
