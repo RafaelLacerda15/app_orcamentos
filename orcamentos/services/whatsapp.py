@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from html import escape
 from urllib.parse import quote
 from pathlib import Path
@@ -41,6 +42,20 @@ class WhatsAppSessionManager:
         self._worker: threading.Thread | None = None
         self._install_process: subprocess.Popen[str] | None = None
         self._send_requests: queue.Queue[dict[str, Any]] = queue.Queue()
+        self._debug_logs_enabled = (os.getenv("WHATSAPP_DEBUG_LOGS") or "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._auto_install_chromium = (os.getenv("WHATSAPP_PLAYWRIGHT_AUTO_INSTALL_CHROMIUM") or "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._last_state_log: tuple[str, str, bool] | None = None
+        self._last_heartbeat_log_at = 0.0
         self._connect_timeout_seconds = max(int(connect_timeout_seconds or 0), 30)
         self._send_min_interval_seconds = max(send_min_interval_seconds, 0.0)
         self._send_max_interval_seconds = max(send_max_interval_seconds, self._send_min_interval_seconds)
@@ -62,10 +77,17 @@ class WhatsAppSessionManager:
             "session_saved": self._profile_dir.exists(),
             "updated_at": time.time(),
         }
+        self._log(
+            "manager_initialized "
+            f"profile_dir={self._profile_dir} "
+            f"connect_timeout_seconds={self._connect_timeout_seconds} "
+            f"auto_install_chromium={self._auto_install_chromium}"
+        )
 
     def start(self) -> None:
         with self._lock:
             if self._worker and self._worker.is_alive():
+                self._log("start_requested_ignored reason=worker_already_running")
                 return
             self._stop_event.clear()
             self._state.update(
@@ -79,8 +101,10 @@ class WhatsAppSessionManager:
             )
             self._worker = threading.Thread(target=self._run, daemon=True, name="whatsapp-session")
             self._worker.start()
+            self._log("start_requested worker_started=true")
 
     def stop(self) -> None:
+        self._log("stop_requested")
         self._stop_event.set()
         with self._lock:
             install_process = self._install_process
@@ -93,6 +117,7 @@ class WhatsAppSessionManager:
         if worker and worker.is_alive():
             worker.join(timeout=5)
         self._set_disconnected("WhatsApp desconectado.")
+        self._log("stop_completed")
 
     def get_state(self) -> dict[str, Any]:
         with self._lock:
@@ -115,6 +140,7 @@ class WhatsAppSessionManager:
                     "updated_at": time.time(),
                 }
             )
+        self._log_state(status, message, has_qr=bool(qr_code))
 
     def _set_error(self, message: str) -> None:
         with self._lock:
@@ -130,6 +156,7 @@ class WhatsAppSessionManager:
                     "updated_at": time.time(),
                 }
             )
+        self._log(f"state_error message={message}")
 
     def _set_disconnected(self, message: str) -> None:
         with self._lock:
@@ -145,11 +172,14 @@ class WhatsAppSessionManager:
                     "updated_at": time.time(),
                 }
             )
+        self._log_state("disconnected", message, has_qr=False)
 
     def _install_chromium_if_needed(self) -> bool:
         command = [sys.executable, "-m", "playwright", "install", "chromium"]
+        self._log(f"chromium_install_check command={' '.join(command)}")
         for attempt in range(1, CHROMIUM_INSTALL_MAX_RETRIES + 1):
             if self._stop_event.is_set():
+                self._log("chromium_install_aborted reason=stop_event_set")
                 return False
 
             self._set_state("connecting", f"Preparando Chromium do Playwright (tentativa {attempt})...")
@@ -161,6 +191,7 @@ class WhatsAppSessionManager:
                     text=True,
                 )
             except Exception as exc:
+                self._log(f"chromium_install_start_failed error={exc}")
                 self._set_error(f"Falha ao iniciar instalacao do Chromium: {exc}")
                 return False
 
@@ -192,8 +223,10 @@ class WhatsAppSessionManager:
                     self._install_process = None
 
             if process.returncode == 0:
+                self._log(f"chromium_install_ok attempt={attempt}")
                 return True
             if self._stop_event.is_set():
+                self._log("chromium_install_aborted_after_process reason=stop_event_set")
                 return False
 
             output = (stderr or stdout or "").strip()
@@ -201,6 +234,10 @@ class WhatsAppSessionManager:
                 output = output.splitlines()[-1].strip()
             if not output:
                 output = "Falha ao instalar Chromium automaticamente."
+            self._log(
+                f"chromium_install_failed attempt={attempt} return_code={process.returncode} "
+                f"output_tail={output[:240]}"
+            )
             if attempt >= CHROMIUM_INSTALL_MAX_RETRIES:
                 self._set_error(output)
                 return False
@@ -209,16 +246,22 @@ class WhatsAppSessionManager:
         return False
 
     def _run(self) -> None:
+        self._log("worker_run_started")
         try:
             from playwright.sync_api import sync_playwright
         except Exception:
+            self._log("playwright_import_failed")
             self._set_error("Playwright nao esta instalado. Rode: pip install playwright")
             return
 
         self._profile_dir.mkdir(parents=True, exist_ok=True)
 
-        if not self._install_chromium_if_needed():
-            return
+        if self._auto_install_chromium:
+            if not self._install_chromium_if_needed():
+                self._log("worker_run_aborted reason=chromium_install_failed_or_aborted")
+                return
+        else:
+            self._log("chromium_auto_install_skipped")
 
         browser_context = None
 
@@ -226,16 +269,41 @@ class WhatsAppSessionManager:
             self._set_state("connecting", "Abrindo WhatsApp Web...")
             connect_started_at = time.time()
             has_connected_once = False
+            first_qr_logged = False
+            last_preview_attempt_at = 0.0
+            last_hint_attempt_at = 0.0
             with sync_playwright() as playwright:
-                browser_context = self._launch_compatible_context(playwright)
+                self._log("playwright_started")
+                launch_started_at = time.time()
+                browser_context = self._launch_context_with_fallback(playwright)
+                self._log(
+                    "browser_context_launched "
+                    f"elapsed_seconds={time.time() - launch_started_at:.2f}"
+                )
                 page = self._open_fresh_whatsapp_page(browser_context)
+                self._log("fresh_page_opened")
+                goto_started_at = time.time()
                 page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded", timeout=120_000)
+                self._log(
+                    "whatsapp_page_loaded_domcontentloaded "
+                    f"elapsed_seconds={time.time() - goto_started_at:.2f}"
+                )
 
                 while not self._stop_event.is_set():
+                    now = time.time()
+                    if now - self._last_heartbeat_log_at >= 10:
+                        self._last_heartbeat_log_at = now
+                        try:
+                            current_url = (page.url or "").strip()
+                        except Exception:
+                            current_url = ""
+                        self._log(f"heartbeat status={self._state.get('status')} page_url={current_url[:180]}")
                     if page.is_closed():
+                        self._log("page_closed_unexpectedly")
                         self._set_error("Navegador do WhatsApp foi encerrado inesperadamente.")
                         break
                     if self._is_browser_rejected(page):
+                        self._log("browser_rejected_detected")
                         self._set_error(
                             "WhatsApp Web rejeitou o navegador automatizado. "
                             "Atualize o Google Chrome da maquina e tente novamente."
@@ -256,26 +324,43 @@ class WhatsAppSessionManager:
                             self._set_disconnected(
                                 f"Tempo limite de {timeout_minutes} minuto(s) para conectar. Sessao encerrada."
                             )
+                            self._log("connect_timeout_reached")
                             break
                         qr_code = self._capture_qr_code(page)
                         if qr_code:
+                            if not first_qr_logged:
+                                first_qr_logged = True
+                                self._log(
+                                    "first_qr_available "
+                                    f"elapsed_since_connect_seconds={time.time() - connect_started_at:.2f}"
+                                )
+                            self._log("qr_code_detected")
                             self._set_state("waiting_qr", "Escaneie o QR Code com seu celular.", qr_code=qr_code)
                         else:
-                            preview = self._capture_page_preview(page)
+                            preview = None
+                            if (now - last_preview_attempt_at) >= 4:
+                                last_preview_attempt_at = now
+                                preview = self._capture_page_preview(page)
                             if preview:
+                                self._log("page_preview_captured_without_qr")
                                 self._set_state(
                                     "waiting_qr",
                                     "Aguardando QR Code. Se nao aparecer em instantes, clique em desconectar e tente novamente.",
                                     qr_code=preview,
                                 )
                             else:
-                                page_hint = self._extract_page_hint(page)
+                                page_hint = None
+                                if (now - last_hint_attempt_at) >= 4:
+                                    last_hint_attempt_at = now
+                                    page_hint = self._extract_page_hint(page)
                                 if page_hint:
+                                    self._log(f"page_hint_without_qr hint={page_hint[:200]}")
                                     if (
                                         "works with google chrome" in page_hint.lower()
                                         or "browser is not supported" in page_hint.lower()
                                         or "navegador nao e suportado" in page_hint.lower()
                                     ):
+                                        self._log("page_hint_detected_browser_block")
                                         self._set_error(
                                             "WhatsApp Web bloqueou o navegador neste ambiente da Render. "
                                             "Use um servidor com Chrome dedicado ou outro provedor de envio."
@@ -296,6 +381,8 @@ class WhatsAppSessionManager:
                         time.sleep(0.75)
         except Exception as exc:
             message = str(exc)
+            self._log(f"worker_run_exception error={message}")
+            self._log(traceback.format_exc())
             if "Executable doesn't exist" in message:
                 message = "Falha ao preparar Chromium automaticamente. Tente iniciar novamente."
             self._set_error(message)
@@ -319,6 +406,7 @@ class WhatsAppSessionManager:
                                 "updated_at": time.time(),
                             }
                         )
+            self._log("worker_run_finished")
 
     def _launch_compatible_context(self, playwright):
         launch_args = [
@@ -363,14 +451,28 @@ class WhatsAppSessionManager:
 
         if use_chrome_channel:
             try:
+                self._log("launch_context_try channel=chrome")
                 return playwright.chromium.launch_persistent_context(
                     channel="chrome",
                     **common_kwargs,
                 )
             except Exception:
+                self._log("launch_context_channel_chrome_failed fallback=playwright_chromium")
                 pass
 
+        self._log("launch_context_try channel=playwright_chromium")
         return playwright.chromium.launch_persistent_context(**common_kwargs)
+
+    def _launch_context_with_fallback(self, playwright):
+        try:
+            return self._launch_compatible_context(playwright)
+        except Exception as exc:
+            message = str(exc or "")
+            if "Executable doesn't exist" in message and not self._auto_install_chromium:
+                self._log("launch_context_missing_executable retry=install_chromium")
+                if self._install_chromium_if_needed():
+                    return self._launch_compatible_context(playwright)
+            raise
 
     @staticmethod
     def _open_fresh_whatsapp_page(browser_context):
@@ -633,6 +735,7 @@ class WhatsAppSessionManager:
     def _send_message_in_context(self, page, phone: str, message: str) -> tuple[bool, str | None]:
         try:
             target_url = f"https://web.whatsapp.com/send?phone={phone}&text={quote(message)}"
+            self._log(f"send_message_start phone={phone} target_url={target_url[:220]}")
             page.goto(target_url, wait_until="domcontentloaded", timeout=120_000)
 
             if self._is_browser_rejected(page):
@@ -643,15 +746,33 @@ class WhatsAppSessionManager:
 
             send_clicked = self._click_send_button(page)
             if send_clicked:
+                self._log("send_message_ok method=click_send_button")
                 return True, None
 
             if self._type_and_send_with_composer(page, message):
+                self._log("send_message_ok method=composer_enter")
                 return True, None
 
+            self._log("send_message_failed reason=unable_to_trigger_send")
             return False, "Nao foi possivel enviar a mensagem no WhatsApp Web."
 
         except Exception as exc:
+            self._log(f"send_message_exception error={exc}")
+            self._log(traceback.format_exc())
             return False, str(exc)
+
+    def _log(self, message: str) -> None:
+        if not self._debug_logs_enabled:
+            return
+        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        print(f"[WHATSAPP][{ts}] {message}", flush=True)
+
+    def _log_state(self, status: str, message: str, *, has_qr: bool) -> None:
+        signature = (status, message, has_qr)
+        if self._last_state_log == signature:
+            return
+        self._last_state_log = signature
+        self._log(f"state_update status={status} has_qr={has_qr} message={message}")
 
     def _wait_until_chat_ready(self, page, timeout_seconds: int = 35) -> bool:
         deadline = time.time() + max(timeout_seconds, 5)
