@@ -56,6 +56,7 @@ class WhatsAppSessionManager:
         }
         self._last_state_log: tuple[str, str, bool] | None = None
         self._last_heartbeat_log_at = 0.0
+        self._cached_chromium_executable_path: str | None = None
         self._connect_timeout_seconds = max(int(connect_timeout_seconds or 0), 30)
         self._send_min_interval_seconds = max(send_min_interval_seconds, 0.0)
         self._send_max_interval_seconds = max(send_max_interval_seconds, self._send_min_interval_seconds)
@@ -256,6 +257,17 @@ class WhatsAppSessionManager:
 
         self._profile_dir.mkdir(parents=True, exist_ok=True)
         browsers_path = (os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
+        if not browsers_path and sys.platform.startswith("linux"):
+            for fallback_path in (
+                "/opt/render/project/src/.cache/ms-playwright",
+                "/opt/render/project/.cache/ms-playwright",
+                "/opt/render/.cache/ms-playwright",
+            ):
+                if Path(fallback_path).exists():
+                    browsers_path = fallback_path
+                    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = fallback_path
+                    self._log(f"playwright_browsers_path_autodetected path={fallback_path}")
+                    break
         if browsers_path:
             browsers_dir = Path(browsers_path)
             self._log(
@@ -458,6 +470,12 @@ class WhatsAppSessionManager:
             "locale": "pt-BR",
             "timeout": 45_000,
         }
+        executable_path = self._resolve_chromium_executable_path()
+        if executable_path:
+            common_kwargs["executable_path"] = executable_path
+            self._log(f"launch_context_executable_path path={executable_path}")
+            self._log("launch_context_try channel=explicit_executable")
+            return playwright.chromium.launch_persistent_context(**common_kwargs)
 
         use_chrome_channel_env = (os.getenv("WHATSAPP_PLAYWRIGHT_USE_CHROME_CHANNEL") or "").strip().lower()
         if use_chrome_channel_env in {"0", "false", "no", "off"}:
@@ -490,8 +508,75 @@ class WhatsAppSessionManager:
             if "Executable doesn't exist" in message and not self._auto_install_chromium:
                 self._log("launch_context_missing_executable retry=install_chromium")
                 if self._install_chromium_if_needed():
+                    self._cached_chromium_executable_path = None
                     return self._launch_compatible_context(playwright)
             raise
+
+    def _resolve_chromium_executable_path(self) -> str | None:
+        if self._cached_chromium_executable_path:
+            return self._cached_chromium_executable_path
+
+        explicit_path = (os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH") or "").strip()
+        if explicit_path:
+            explicit_file = Path(explicit_path)
+            self._log(
+                "chromium_executable_from_env "
+                f"path={explicit_path} exists={explicit_file.exists()}"
+            )
+            if explicit_file.exists():
+                self._cached_chromium_executable_path = str(explicit_file)
+                return self._cached_chromium_executable_path
+
+        candidate_base_dirs: list[Path] = []
+        configured_browsers_path = (os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
+        if configured_browsers_path:
+            candidate_base_dirs.append(Path(configured_browsers_path))
+        candidate_base_dirs.extend(
+            [
+                Path("/opt/render/project/src/.cache/ms-playwright"),
+                Path("/opt/render/project/.cache/ms-playwright"),
+                Path("/opt/render/.cache/ms-playwright"),
+                Path.home() / ".cache" / "ms-playwright",
+            ]
+        )
+
+        seen_dirs: set[str] = set()
+        unique_candidate_dirs: list[Path] = []
+        for base_dir in candidate_base_dirs:
+            base_dir_str = str(base_dir)
+            if base_dir_str in seen_dirs:
+                continue
+            seen_dirs.add(base_dir_str)
+            unique_candidate_dirs.append(base_dir)
+
+        found_executables: list[Path] = []
+        for base_dir in unique_candidate_dirs:
+            try:
+                if not base_dir.exists():
+                    continue
+                found_executables.extend(base_dir.glob("chromium-*/chrome-linux/chrome"))
+            except Exception:
+                continue
+
+        if not found_executables:
+            self._log("chromium_executable_not_found_in_candidates")
+            return None
+
+        def _version_key(path: Path) -> int:
+            try:
+                parent_name = path.parents[1].name
+                return int(parent_name.split("-", 1)[1])
+            except Exception:
+                return -1
+
+        found_executables.sort(key=_version_key, reverse=True)
+        selected = found_executables[0]
+        self._cached_chromium_executable_path = str(selected)
+        self._log(
+            "chromium_executable_autodetected "
+            f"path={self._cached_chromium_executable_path} matches={len(found_executables)}"
+        )
+        return self._cached_chromium_executable_path
 
     @staticmethod
     def _open_fresh_whatsapp_page(browser_context):
