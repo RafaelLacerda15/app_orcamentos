@@ -21,6 +21,8 @@ services:
         value: "0"
       - key: WHATSAPP_PLAYWRIGHT_STEALTH_ENABLED
         value: "1"
+      - key: WHATSAPP_CONNECT_TIMEOUT_SECONDS
+        value: "300"
       - key: WHATSAPP_DEBUG_LOGS
         value: "1"
       - key: DATABASE_URL

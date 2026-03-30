@@ -22,6 +22,7 @@ WHATSAPP_MODERN_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/133.0.0.0 Safari/537.36"
 )
+QR_MIN_IMAGE_DATA_URL_LENGTH = 256
 QR_REFRESH_CANDIDATE_SELECTORS = (
     "button[aria-label*='Atualizar']",
     "button[aria-label*='Recarregar']",
@@ -47,7 +48,7 @@ class WhatsAppSessionManager:
         self,
         profile_dir: Path,
         *,
-        connect_timeout_seconds: int = 180,
+        connect_timeout_seconds: int = 300,
         send_min_interval_seconds: float = 1.0,
         send_max_interval_seconds: float = 1.8,
         send_burst_size: int = 10,
@@ -335,6 +336,7 @@ class WhatsAppSessionManager:
             last_qr_reload_at = 0.0
             qr_refresh_click_attempts = 0
             last_qr_refresh_click_at = 0.0
+            last_qr_dom_diag_at = 0.0
             with sync_playwright() as playwright:
                 self._log("playwright_started")
                 launch_started_at = time.time()
@@ -420,8 +422,13 @@ class WhatsAppSessionManager:
                                     qr_wait_started_at = now
                                     self._log("qr_wait_detected_without_code")
                                     self._log_refresh_qr_selector_snapshot(page)
+                                    self._log_qr_dom_diagnostics(page)
+                                    last_qr_dom_diag_at = now
 
                                 qr_wait_elapsed = now - qr_wait_started_at
+                                if (now - last_qr_dom_diag_at) >= 25:
+                                    self._log_qr_dom_diagnostics(page)
+                                    last_qr_dom_diag_at = now
                                 if (
                                     qr_wait_elapsed >= 15
                                     and qr_refresh_click_attempts < 4
@@ -842,6 +849,8 @@ class WhatsAppSessionManager:
     ) -> str | None:
         # 1) Tentativa direta em elementos de QR (canvas/img) para obter imagem limpa.
         qr_selectors: list[str] = [
+            "div[aria-label*='QR'] canvas",
+            "div[aria-label*='Scan'] canvas",
             "canvas[aria-label*='Scan']",
             "canvas[aria-label*='Escanear']",
             "div[data-ref] canvas",
@@ -868,6 +877,11 @@ class WhatsAppSessionManager:
                 data_url = WhatsAppSessionManager._capture_element_as_data_url(page, selector)
                 if data_url:
                     return data_url
+
+        # 3) Fallback robusto: varrer todos os canvas/img visiveis e escolher o melhor candidato.
+        best_candidate = WhatsAppSessionManager._capture_best_qr_candidate_data_url(page)
+        if best_candidate:
+            return best_candidate
 
         return None
 
@@ -932,7 +946,7 @@ class WhatsAppSessionManager:
                     except Exception:
                         canvas_data_url = None
                     if isinstance(canvas_data_url, str) and canvas_data_url.startswith("data:image/png;base64,"):
-                        if len(canvas_data_url) > 256:
+                        if len(canvas_data_url) > QR_MIN_IMAGE_DATA_URL_LENGTH:
                             return canvas_data_url
 
                 # Em img, se ja houver data URL, reaproveita.
@@ -954,13 +968,139 @@ class WhatsAppSessionManager:
                 if not png:
                     continue
                 encoded = base64.b64encode(png).decode("ascii")
-                if len(encoded) < 256:
+                if len(encoded) < QR_MIN_IMAGE_DATA_URL_LENGTH:
                     continue
                 return f"data:image/png;base64,{encoded}"
             except Exception:
                 continue
 
         return None
+
+    def _log_qr_dom_diagnostics(self, page) -> None:
+        try:
+            diagnostics = page.evaluate(
+                """
+                () => {
+                  const bySelector = (selector) => {
+                    try {
+                      return document.querySelectorAll(selector).length;
+                    } catch (_) {
+                      return -1;
+                    }
+                  };
+                  const text = (document.body && document.body.innerText ? document.body.innerText : '').toLowerCase();
+                  return {
+                    canvas_count: document.querySelectorAll('canvas').length,
+                    img_count: document.querySelectorAll('img').length,
+                    div_data_ref_count: bySelector('div[data-ref]'),
+                    qrcode_testid_count: bySelector("[data-testid='qrcode']"),
+                    has_scan_text: text.includes('escaneie para entrar') || text.includes('scan to log in'),
+                    has_loading_text: text.includes('carregando') || text.includes('loading'),
+                    has_refresh_text: text.includes('atualizar qr') || text.includes('refresh qr code'),
+                  };
+                }
+                """
+            )
+        except Exception as exc:
+            self._log(f"qr_dom_diagnostics_failed error={exc}")
+            return
+
+        if not isinstance(diagnostics, dict):
+            self._log("qr_dom_diagnostics_unexpected_result")
+            return
+
+        self._log(
+            "qr_dom_diagnostics "
+            f"canvas={diagnostics.get('canvas_count')} "
+            f"img={diagnostics.get('img_count')} "
+            f"div_data_ref={diagnostics.get('div_data_ref_count')} "
+            f"qrcode_testid={diagnostics.get('qrcode_testid_count')} "
+            f"has_scan_text={diagnostics.get('has_scan_text')} "
+            f"has_loading_text={diagnostics.get('has_loading_text')} "
+            f"has_refresh_text={diagnostics.get('has_refresh_text')}"
+        )
+
+    @staticmethod
+    def _capture_best_qr_candidate_data_url(page) -> str | None:
+        try:
+            candidate = page.evaluate(
+                """
+                () => {
+                  const minSize = 90;
+                  const maxSize = 700;
+                  const vw = Math.max(window.innerWidth || 0, 1);
+                  const vh = Math.max(window.innerHeight || 0, 1);
+                  let best = null;
+
+                  const scoreRect = (rect) => {
+                    const w = Number(rect.width || 0);
+                    const h = Number(rect.height || 0);
+                    if (w < minSize || h < minSize || w > maxSize || h > maxSize) return -1;
+                    const ratio = Math.abs(w - h) / Math.max(w, h);
+                    if (ratio > 0.45) return -1;
+                    const cx = rect.left + (w / 2);
+                    const cy = rect.top + (h / 2);
+                    const centerScore =
+                      (cx > vw * 0.15 && cx < vw * 0.85 && cy > vh * 0.05 && cy < vh * 0.9) ? 1.0 : 0.0;
+                    const sizeScore = Math.min(w, h) / 220;
+                    return (2.0 - ratio) + centerScore + sizeScore;
+                  };
+
+                  const pushCandidate = (dataUrl, kind, rect, extraScore = 0) => {
+                    if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return;
+                    if (dataUrl.length < 260) return;
+                    const baseScore = scoreRect(rect);
+                    if (baseScore < 0) return;
+                    const score = baseScore + extraScore;
+                    if (!best || score > best.score || (score === best.score && dataUrl.length > best.length)) {
+                      best = {
+                        data_url: dataUrl,
+                        score,
+                        length: dataUrl.length,
+                        kind,
+                        width: Math.round(rect.width || 0),
+                        height: Math.round(rect.height || 0),
+                      };
+                    }
+                  };
+
+                  const canvases = Array.from(document.querySelectorAll('canvas'));
+                  for (const el of canvases) {
+                    const rect = el.getBoundingClientRect();
+                    let dataUrl = null;
+                    try {
+                      dataUrl = el.toDataURL('image/png');
+                    } catch (_) {
+                      dataUrl = null;
+                    }
+                    pushCandidate(dataUrl, 'canvas', rect, 0.4);
+                  }
+
+                  const images = Array.from(document.querySelectorAll('img'));
+                  for (const el of images) {
+                    const rect = el.getBoundingClientRect();
+                    const src = (el.currentSrc || el.src || '').trim();
+                    if (!src.startsWith('data:image/')) continue;
+                    pushCandidate(src, 'img', rect, 0.1);
+                  }
+
+                  return best;
+                }
+                """
+            )
+        except Exception:
+            return None
+
+        if not isinstance(candidate, dict):
+            return None
+        data_url = candidate.get("data_url")
+        if not isinstance(data_url, str):
+            return None
+        if not data_url.startswith("data:image/"):
+            return None
+        if len(data_url) < QR_MIN_IMAGE_DATA_URL_LENGTH:
+            return None
+        return data_url
 
     @staticmethod
     def _is_browser_rejected(page) -> bool:
