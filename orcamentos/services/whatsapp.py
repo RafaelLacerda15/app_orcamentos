@@ -293,6 +293,11 @@ class WhatsAppSessionManager:
             last_hint_attempt_at = 0.0
             last_generic_qr_attempt_at = 0.0
             last_container_qr_attempt_at = 0.0
+            qr_wait_started_at: float | None = None
+            qr_reload_attempts = 0
+            last_qr_reload_at = 0.0
+            qr_refresh_click_attempts = 0
+            last_qr_refresh_click_at = 0.0
             with sync_playwright() as playwright:
                 self._log("playwright_started")
                 launch_started_at = time.time()
@@ -333,6 +338,8 @@ class WhatsAppSessionManager:
                     is_connected = self._is_connected(page)
                     if is_connected:
                         has_connected_once = True
+                        qr_wait_started_at = None
+                        qr_refresh_click_attempts = 0
                     if is_connected:
                         self._set_state("connected", "Conectado ao WhatsApp.")
                     else:
@@ -359,6 +366,8 @@ class WhatsAppSessionManager:
                             include_container=run_container_qr_scan,
                         )
                         if qr_code:
+                            qr_wait_started_at = None
+                            qr_refresh_click_attempts = 0
                             if not first_qr_logged:
                                 first_qr_logged = True
                                 self._log(
@@ -368,6 +377,46 @@ class WhatsAppSessionManager:
                             self._log("qr_code_detected")
                             self._set_state("waiting_qr", "Escaneie o QR Code com seu celular.", qr_code=qr_code)
                         else:
+                            if self._looks_like_qr_wait_screen(page):
+                                if qr_wait_started_at is None:
+                                    qr_wait_started_at = now
+                                    self._log("qr_wait_detected_without_code")
+
+                                qr_wait_elapsed = now - qr_wait_started_at
+                                if (
+                                    qr_wait_elapsed >= 15
+                                    and qr_refresh_click_attempts < 4
+                                    and (now - last_qr_refresh_click_at) >= 8
+                                ):
+                                    if self._try_click_refresh_qr(page):
+                                        qr_refresh_click_attempts += 1
+                                        last_qr_refresh_click_at = now
+                                        self._log(
+                                            "qr_refresh_clicked "
+                                            f"attempt={qr_refresh_click_attempts} elapsed_without_qr={qr_wait_elapsed:.1f}"
+                                        )
+
+                                if (
+                                    qr_wait_elapsed >= 40
+                                    and qr_reload_attempts < 2
+                                    and (now - last_qr_reload_at) >= 25
+                                ):
+                                    qr_reload_attempts += 1
+                                    last_qr_reload_at = now
+                                    self._log(
+                                        "qr_stuck_reloading_page "
+                                        f"attempt={qr_reload_attempts} elapsed_without_qr={qr_wait_elapsed:.1f}"
+                                    )
+                                    self._set_state("connecting", "QR nao carregou. Recarregando WhatsApp Web...")
+                                    try:
+                                        page.reload(wait_until="domcontentloaded", timeout=90_000)
+                                    except Exception as exc:
+                                        self._log(f"qr_stuck_reload_failed error={exc}")
+                                    qr_wait_started_at = time.time()
+                                    continue
+                            else:
+                                qr_wait_started_at = None
+
                             preview = None
                             if (now - last_preview_attempt_at) >= 4:
                                 last_preview_attempt_at = now
@@ -604,6 +653,60 @@ class WhatsAppSessionManager:
             try:
                 if page.locator(selector).count() > 0:
                     return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
+    def _looks_like_qr_wait_screen(page) -> bool:
+        instruction_selectors = (
+            "text=Escaneie para entrar",
+            "text=Scan to log in",
+            "text=Scan QR code",
+        )
+        qr_selectors = (
+            "div[data-ref] canvas",
+            "[data-testid='qrcode'] canvas",
+            "canvas[aria-label*='Scan']",
+            "canvas[aria-label*='Escanear']",
+        )
+        for selector in qr_selectors:
+            try:
+                if page.locator(selector).count() > 0:
+                    return False
+            except Exception:
+                continue
+
+        for selector in instruction_selectors:
+            try:
+                if page.locator(selector).count() > 0:
+                    return True
+            except Exception:
+                continue
+        return False
+
+    @staticmethod
+    def _try_click_refresh_qr(page) -> bool:
+        selectors = (
+            "button[aria-label*='Atualizar']",
+            "button[aria-label*='Recarregar']",
+            "button[aria-label*='Refresh']",
+            "button:has(span[data-icon='refresh-large'])",
+            "button:has(span[data-icon='refresh'])",
+            "span[data-icon='refresh-large']",
+        )
+        for selector in selectors:
+            try:
+                locator = page.locator(selector)
+                if locator.count() == 0:
+                    continue
+                target = locator.first
+                if selector.startswith("span["):
+                    target = target.locator("xpath=ancestor::button[1]")
+                if not target.is_visible():
+                    continue
+                target.click(timeout=2_000)
+                return True
             except Exception:
                 continue
         return False
