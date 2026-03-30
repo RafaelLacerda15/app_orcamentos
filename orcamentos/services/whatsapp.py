@@ -263,10 +263,10 @@ class WhatsAppSessionManager:
             self._set_error("Playwright nao esta instalado. Rode: pip install playwright")
             return
 
-        stealth_sync = None
+        stealth_api = None
         try:
-            from playwright_stealth import Stealth
-            stealth_sync = Stealth
+            import playwright_stealth as _stealth_module
+            stealth_api = _stealth_module
             self._log("playwright_stealth_imported")
         except Exception as exc:
             self._log(f"playwright_stealth_import_failed error={exc}")
@@ -326,7 +326,7 @@ class WhatsAppSessionManager:
                 )
                 page = self._open_fresh_whatsapp_page(browser_context)
                 self._log("fresh_page_opened")
-                self._apply_stealth_if_enabled(page, stealth_sync)
+                self._apply_stealth_if_enabled(page, stealth_api)
                 goto_started_at = time.time()
                 page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded", timeout=120_000)
                 self._log(
@@ -429,7 +429,7 @@ class WhatsAppSessionManager:
                                     self._set_state("connecting", "QR nao carregou. Recarregando WhatsApp Web...")
                                     try:
                                         page.reload(wait_until="domcontentloaded", timeout=90_000)
-                                        self._apply_stealth_if_enabled(page, stealth_sync)
+                                        self._apply_stealth_if_enabled(page, stealth_api)
                                     except Exception as exc:
                                         self._log(f"qr_stuck_reload_failed error={exc}")
                                     qr_wait_started_at = time.time()
@@ -582,16 +582,60 @@ class WhatsAppSessionManager:
                     return self._launch_compatible_context(playwright)
             raise
 
-    def _apply_stealth_if_enabled(self, page, stealth_sync) -> None:
+    def _apply_stealth_if_enabled(self, page, stealth_api) -> None:
         if not self._stealth_enabled:
             return
-        if stealth_sync is None:
+        if stealth_api is None:
             return
-        try:
-            stealth_sync(page)
-            self._log("playwright_stealth_applied")
-        except Exception as exc:
-            self._log(f"playwright_stealth_apply_failed error={exc}")
+
+        last_error: Exception | None = None
+
+        stealth_sync = getattr(stealth_api, "stealth_sync", None)
+        if callable(stealth_sync):
+            try:
+                stealth_sync(page)
+                self._log("playwright_stealth_applied strategy=stealth_sync(page)")
+                return
+            except TypeError as exc:
+                last_error = exc
+                # Compatibilidade com versões onde `stealth_sync` age como construtor.
+                try:
+                    stealth_obj = stealth_sync()
+                    apply_sync = getattr(stealth_obj, "apply_stealth_sync", None)
+                    if callable(apply_sync):
+                        apply_sync(page)
+                        self._log("playwright_stealth_applied strategy=stealth_sync().apply_stealth_sync(page)")
+                        return
+                    if callable(stealth_obj):
+                        stealth_obj(page)
+                        self._log("playwright_stealth_applied strategy=stealth_sync()(page)")
+                        return
+                except Exception as inner_exc:
+                    last_error = inner_exc
+            except Exception as exc:
+                last_error = exc
+
+        stealth_class = getattr(stealth_api, "Stealth", None)
+        if callable(stealth_class):
+            try:
+                stealth_obj = stealth_class()
+                apply_sync = getattr(stealth_obj, "apply_stealth_sync", None)
+                if callable(apply_sync):
+                    apply_sync(page)
+                    self._log("playwright_stealth_applied strategy=Stealth().apply_stealth_sync(page)")
+                    return
+                if callable(stealth_obj):
+                    stealth_obj(page)
+                    self._log("playwright_stealth_applied strategy=Stealth()(page)")
+                    return
+                raise RuntimeError("Stealth sem metodo de aplicacao sincronizado.")
+            except Exception as exc:
+                last_error = exc
+
+        if last_error is None:
+            self._log("playwright_stealth_apply_failed error=API_stealth_indisponivel")
+        else:
+            self._log(f"playwright_stealth_apply_failed error={last_error}")
 
     def _resolve_chromium_executable_path(self) -> str | None:
         if self._cached_chromium_executable_path:
