@@ -64,6 +64,7 @@ class WhatsAppSessionManager:
         self._last_state_log: tuple[str, str, bool] | None = None
         self._last_heartbeat_log_at = 0.0
         self._cached_chromium_executable_path: str | None = None
+        self._stealth_applied_page_ids: set[int] = set()
         self._connect_timeout_seconds = max(int(connect_timeout_seconds or 0), 30)
         self._send_min_interval_seconds = max(send_min_interval_seconds, 0.0)
         self._send_max_interval_seconds = max(send_max_interval_seconds, self._send_min_interval_seconds)
@@ -587,6 +588,10 @@ class WhatsAppSessionManager:
             return
         if stealth_api is None:
             return
+        page_identifier = id(page)
+        if page_identifier in self._stealth_applied_page_ids:
+            self._log("playwright_stealth_skip_duplicate_page")
+            return
 
         last_error: Exception | None = None
 
@@ -594,6 +599,7 @@ class WhatsAppSessionManager:
         if callable(stealth_sync):
             try:
                 stealth_sync(page)
+                self._stealth_applied_page_ids.add(page_identifier)
                 self._log("playwright_stealth_applied strategy=stealth_sync(page)")
                 return
             except TypeError as exc:
@@ -604,10 +610,12 @@ class WhatsAppSessionManager:
                     apply_sync = getattr(stealth_obj, "apply_stealth_sync", None)
                     if callable(apply_sync):
                         apply_sync(page)
+                        self._stealth_applied_page_ids.add(page_identifier)
                         self._log("playwright_stealth_applied strategy=stealth_sync().apply_stealth_sync(page)")
                         return
                     if callable(stealth_obj):
                         stealth_obj(page)
+                        self._stealth_applied_page_ids.add(page_identifier)
                         self._log("playwright_stealth_applied strategy=stealth_sync()(page)")
                         return
                 except Exception as inner_exc:
@@ -622,10 +630,12 @@ class WhatsAppSessionManager:
                 apply_sync = getattr(stealth_obj, "apply_stealth_sync", None)
                 if callable(apply_sync):
                     apply_sync(page)
+                    self._stealth_applied_page_ids.add(page_identifier)
                     self._log("playwright_stealth_applied strategy=Stealth().apply_stealth_sync(page)")
                     return
                 if callable(stealth_obj):
                     stealth_obj(page)
+                    self._stealth_applied_page_ids.add(page_identifier)
                     self._log("playwright_stealth_applied strategy=Stealth()(page)")
                     return
                 raise RuntimeError("Stealth sem metodo de aplicacao sincronizado.")
@@ -767,9 +777,19 @@ class WhatsAppSessionManager:
             "button[aria-label*='Atualizar']",
             "button[aria-label*='Recarregar']",
             "button[aria-label*='Refresh']",
+            "div[role='button'][aria-label*='Atualizar']",
+            "div[role='button'][aria-label*='Recarregar']",
+            "div[role='button'][aria-label*='Refresh']",
             "button:has(span[data-icon='refresh-large'])",
             "button:has(span[data-icon='refresh'])",
             "span[data-icon='refresh-large']",
+            "span[data-icon='refresh']",
+            "[data-icon='refresh-large']",
+            "[data-icon='refresh']",
+            "button:has-text('Atualizar')",
+            "button:has-text('Refresh')",
+            "div[role='button']:has-text('Atualizar')",
+            "div[role='button']:has-text('Refresh')",
         )
         for selector in selectors:
             try:
@@ -777,8 +797,10 @@ class WhatsAppSessionManager:
                 if locator.count() == 0:
                     continue
                 target = locator.first
-                if selector.startswith("span["):
-                    target = target.locator("xpath=ancestor::button[1]")
+                if selector.startswith("span[") or selector.startswith("[data-icon="):
+                    button_ancestor = target.locator("xpath=ancestor::*[@role='button' or self::button][1]")
+                    if button_ancestor.count() > 0:
+                        target = button_ancestor.first
                 if not target.is_visible():
                     continue
                 target.click(timeout=2_000)
