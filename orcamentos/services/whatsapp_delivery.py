@@ -29,14 +29,17 @@ def send_whatsapp_message(
     provider = whatsapp_provider()
     if provider == "pywhatkit":
         if session_manager is not None:
-            sent, error = session_manager.send_message_with_connected_session(normalized_phone, message)
+            sent, error = session_manager.send_message_with_connected_session(
+                normalized_phone, message)
             if sent:
                 return True, None
-            current_app.logger.warning("Falha no envio pela sessao Playwright: %s", error)
+            current_app.logger.warning(
+                "Falha no envio pela sessao Playwright: %s", error)
             return False, error or "Falha ao enviar pela sessao Playwright."
         return _send_with_pywhatkit(normalized_phone, message)
 
-    current_app.logger.info("WhatsApp (simulado) para %s: %s", normalized_phone, message)
+    current_app.logger.info(
+        "WhatsApp (simulado) para %s: %s", normalized_phone, message)
     return True, None
 
 
@@ -46,9 +49,12 @@ def _send_with_pywhatkit(phone: str, message: str) -> tuple[bool, str | None]:
     except Exception:
         return False, "PyWhatKit nao instalado. Rode: pip install pywhatkit"
 
-    wait_time = _int_config("WHATSAPP_PYWHATKIT_WAIT_TIME", 15, minimum=5, maximum=120)
-    close_time = _int_config("WHATSAPP_PYWHATKIT_CLOSE_TIME", 3, minimum=1, maximum=30)
-    close_tab = bool(current_app.config.get("WHATSAPP_PYWHATKIT_CLOSE_TAB", True))
+    wait_time = _int_config(
+        "WHATSAPP_PYWHATKIT_WAIT_TIME", 15, minimum=5, maximum=120)
+    close_time = _int_config(
+        "WHATSAPP_PYWHATKIT_CLOSE_TIME", 3, minimum=1, maximum=30)
+    close_tab = bool(current_app.config.get(
+        "WHATSAPP_PYWHATKIT_CLOSE_TAB", True))
 
     try:
         pywhatkit.sendwhatmsg_instantly(
@@ -60,7 +66,8 @@ def _send_with_pywhatkit(phone: str, message: str) -> tuple[bool, str | None]:
         )
         return True, None
     except Exception as exc:
-        current_app.logger.error("Falha no envio via PyWhatKit para %s: %s", phone, exc)
+        current_app.logger.error(
+            "Falha no envio via PyWhatKit para %s: %s", phone, exc)
         return False, str(exc)
 
 

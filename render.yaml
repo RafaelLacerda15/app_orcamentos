@@ -2,7 +2,7 @@ services:
   - type: web
     name: app-orcamentos
     env: python
-    buildCommand: pip install -r requirements.txt && mkdir -p /opt/render/.cache/ms-playwright && PLAYWRIGHT_BROWSERS_PATH=/opt/render/.cache/ms-playwright python -m playwright install chromium
+    buildCommand: pip install -r requirements.txt && mkdir -p /opt/render/.cache/ms-playwright && PLAYWRIGHT_BROWSERS_PATH=/opt/render/.cache/ms-playwright python -m playwright install chromium --with-deps
     startCommand: gunicorn main:app --workers 1 --threads 4 --bind 0.0.0.0:${PORT:-1000}
     envVars:
       - key: PYTHON_VERSION
@@ -23,6 +23,8 @@ services:
         value: "1"
       - key: WHATSAPP_CONNECT_TIMEOUT_SECONDS
         value: "300"
+      - key: WHATSAPP_PLAYWRIGHT_SINGLE_PROCESS
+        value: "1"
       - key: WHATSAPP_DEBUG_LOGS
         value: "1"
       - key: DATABASE_URL

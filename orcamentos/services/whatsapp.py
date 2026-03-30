@@ -84,11 +84,14 @@ class WhatsAppSessionManager:
         self._last_heartbeat_log_at = 0.0
         self._cached_chromium_executable_path: str | None = None
         self._stealth_applied_page_ids: set[int] = set()
-        self._connect_timeout_seconds = max(int(connect_timeout_seconds or 0), 30)
+        self._connect_timeout_seconds = max(
+            int(connect_timeout_seconds or 0), 30)
         self._send_min_interval_seconds = max(send_min_interval_seconds, 0.0)
-        self._send_max_interval_seconds = max(send_max_interval_seconds, self._send_min_interval_seconds)
+        self._send_max_interval_seconds = max(
+            send_max_interval_seconds, self._send_min_interval_seconds)
         self._send_burst_size = max(send_burst_size, 0)
-        self._send_burst_pause_min_seconds = max(send_burst_pause_min_seconds, 0.0)
+        self._send_burst_pause_min_seconds = max(
+            send_burst_pause_min_seconds, 0.0)
         self._send_burst_pause_max_seconds = max(
             send_burst_pause_max_seconds,
             self._send_burst_pause_min_seconds,
@@ -116,7 +119,8 @@ class WhatsAppSessionManager:
     def start(self) -> None:
         with self._lock:
             if self._worker and self._worker.is_alive():
-                self._log("start_requested_ignored reason=worker_already_running")
+                self._log(
+                    "start_requested_ignored reason=worker_already_running")
                 return
             self._stop_event.clear()
             self._state.update(
@@ -128,7 +132,8 @@ class WhatsAppSessionManager:
                     "updated_at": time.time(),
                 }
             )
-            self._worker = threading.Thread(target=self._run, daemon=True, name="whatsapp-session")
+            self._worker = threading.Thread(
+                target=self._run, daemon=True, name="whatsapp-session")
             self._worker.start()
             self._log("start_requested worker_started=true")
 
@@ -151,7 +156,8 @@ class WhatsAppSessionManager:
     def get_state(self) -> dict[str, Any]:
         with self._lock:
             state = dict(self._state)
-            state["running"] = bool(self._worker and self._worker.is_alive() and not self._stop_event.is_set())
+            state["running"] = bool(
+                self._worker and self._worker.is_alive() and not self._stop_event.is_set())
             state["session_saved"] = self._profile_dir.exists()
             return state
 
@@ -211,7 +217,8 @@ class WhatsAppSessionManager:
                 self._log("chromium_install_aborted reason=stop_event_set")
                 return False
 
-            self._set_state("connecting", f"Preparando Chromium do Playwright (tentativa {attempt})...")
+            self._set_state(
+                "connecting", f"Preparando Chromium do Playwright (tentativa {attempt})...")
             try:
                 process = subprocess.Popen(
                     command,
@@ -221,7 +228,8 @@ class WhatsAppSessionManager:
                 )
             except Exception as exc:
                 self._log(f"chromium_install_start_failed error={exc}")
-                self._set_error(f"Falha ao iniciar instalacao do Chromium: {exc}")
+                self._set_error(
+                    f"Falha ao iniciar instalacao do Chromium: {exc}")
                 return False
 
             with self._lock:
@@ -255,7 +263,8 @@ class WhatsAppSessionManager:
                 self._log(f"chromium_install_ok attempt={attempt}")
                 return True
             if self._stop_event.is_set():
-                self._log("chromium_install_aborted_after_process reason=stop_event_set")
+                self._log(
+                    "chromium_install_aborted_after_process reason=stop_event_set")
                 return False
 
             output = (stderr or stdout or "").strip()
@@ -270,7 +279,8 @@ class WhatsAppSessionManager:
             if attempt >= CHROMIUM_INSTALL_MAX_RETRIES:
                 self._set_error(output)
                 return False
-            self._set_state("connecting", "Falha ao preparar Chromium. Tentando novamente...")
+            self._set_state(
+                "connecting", "Falha ao preparar Chromium. Tentando novamente...")
 
         return False
 
@@ -280,7 +290,8 @@ class WhatsAppSessionManager:
             from playwright.sync_api import sync_playwright
         except Exception:
             self._log("playwright_import_failed")
-            self._set_error("Playwright nao esta instalado. Rode: pip install playwright")
+            self._set_error(
+                "Playwright nao esta instalado. Rode: pip install playwright")
             return
 
         stealth_api = None
@@ -304,7 +315,8 @@ class WhatsAppSessionManager:
                 if Path(fallback_path).exists():
                     browsers_path = fallback_path
                     os.environ["PLAYWRIGHT_BROWSERS_PATH"] = fallback_path
-                    self._log(f"playwright_browsers_path_autodetected path={fallback_path}")
+                    self._log(
+                        f"playwright_browsers_path_autodetected path={fallback_path}")
                     break
         if browsers_path:
             browsers_dir = Path(browsers_path)
@@ -315,7 +327,8 @@ class WhatsAppSessionManager:
 
         if self._auto_install_chromium:
             if not self._install_chromium_if_needed():
-                self._log("worker_run_aborted reason=chromium_install_failed_or_aborted")
+                self._log(
+                    "worker_run_aborted reason=chromium_install_failed_or_aborted")
                 return
         else:
             self._log("chromium_auto_install_skipped")
@@ -340,7 +353,8 @@ class WhatsAppSessionManager:
             with sync_playwright() as playwright:
                 self._log("playwright_started")
                 launch_started_at = time.time()
-                browser_context = self._launch_context_with_fallback(playwright)
+                browser_context = self._launch_context_with_fallback(
+                    playwright)
                 self._log(
                     "browser_context_launched "
                     f"elapsed_seconds={time.time() - launch_started_at:.2f}"
@@ -349,7 +363,8 @@ class WhatsAppSessionManager:
                 self._log("fresh_page_opened")
                 self._apply_stealth_if_enabled(page, stealth_api)
                 goto_started_at = time.time()
-                page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded", timeout=120_000)
+                page.goto("https://web.whatsapp.com/",
+                          wait_until="domcontentloaded", timeout=60_000)
                 self._log(
                     "whatsapp_page_loaded_domcontentloaded "
                     f"elapsed_seconds={time.time() - goto_started_at:.2f}"
@@ -363,10 +378,12 @@ class WhatsAppSessionManager:
                             current_url = (page.url or "").strip()
                         except Exception:
                             current_url = ""
-                        self._log(f"heartbeat status={self._state.get('status')} page_url={current_url[:180]}")
+                        self._log(
+                            f"heartbeat status={self._state.get('status')} page_url={current_url[:180]}")
                     if page.is_closed():
                         self._log("page_closed_unexpectedly")
-                        self._set_error("Navegador do WhatsApp foi encerrado inesperadamente.")
+                        self._set_error(
+                            "Navegador do WhatsApp foi encerrado inesperadamente.")
                         break
                     if self._is_browser_rejected(page):
                         self._log("browser_rejected_detected")
@@ -388,16 +405,19 @@ class WhatsAppSessionManager:
                             and self._connect_timeout_seconds > 0
                             and (time.time() - connect_started_at) >= self._connect_timeout_seconds
                         ):
-                            timeout_minutes = max(1, self._connect_timeout_seconds // 60)
+                            timeout_minutes = max(
+                                1, self._connect_timeout_seconds // 60)
                             self._set_disconnected(
                                 f"Tempo limite de {timeout_minutes} minuto(s) para conectar. Sessao encerrada."
                             )
                             self._log("connect_timeout_reached")
                             break
-                        run_generic_qr_scan = (now - last_generic_qr_attempt_at) >= 6
+                        run_generic_qr_scan = (
+                            now - last_generic_qr_attempt_at) >= 6
                         if run_generic_qr_scan:
                             last_generic_qr_attempt_at = now
-                        run_container_qr_scan = (now - last_container_qr_attempt_at) >= 10
+                        run_container_qr_scan = (
+                            now - last_container_qr_attempt_at) >= 10
                         if run_container_qr_scan:
                             last_container_qr_attempt_at = now
                         qr_code = self._capture_qr_code(
@@ -415,13 +435,15 @@ class WhatsAppSessionManager:
                                     f"elapsed_since_connect_seconds={time.time() - connect_started_at:.2f}"
                                 )
                             self._log("qr_code_detected")
-                            self._set_state("waiting_qr", "Escaneie o QR Code com seu celular.", qr_code=qr_code)
+                            self._set_state(
+                                "waiting_qr", "Escaneie o QR Code com seu celular.", qr_code=qr_code)
                         else:
                             if self._looks_like_qr_wait_screen(page):
                                 if qr_wait_started_at is None:
                                     qr_wait_started_at = now
                                     self._log("qr_wait_detected_without_code")
-                                    self._log_refresh_qr_selector_snapshot(page)
+                                    self._log_refresh_qr_selector_snapshot(
+                                        page)
                                     self._log_qr_dom_diagnostics(page)
                                     last_qr_dom_diag_at = now
 
@@ -430,9 +452,9 @@ class WhatsAppSessionManager:
                                     self._log_qr_dom_diagnostics(page)
                                     last_qr_dom_diag_at = now
                                 if (
-                                    qr_wait_elapsed >= 15
+                                    qr_wait_elapsed >= 8
                                     and qr_refresh_click_attempts < 4
-                                    and (now - last_qr_refresh_click_at) >= 8
+                                    and (now - last_qr_refresh_click_at) >= 5
                                 ):
                                     if self._try_click_refresh_qr(page):
                                         qr_refresh_click_attempts += 1
@@ -443,9 +465,9 @@ class WhatsAppSessionManager:
                                         )
 
                                 if (
-                                    qr_wait_elapsed >= 40
+                                    qr_wait_elapsed >= 20
                                     and qr_reload_attempts < 2
-                                    and (now - last_qr_reload_at) >= 25
+                                    and (now - last_qr_reload_at) >= 15
                                 ):
                                     qr_reload_attempts += 1
                                     last_qr_reload_at = now
@@ -453,12 +475,16 @@ class WhatsAppSessionManager:
                                         "qr_stuck_reloading_page "
                                         f"attempt={qr_reload_attempts} elapsed_without_qr={qr_wait_elapsed:.1f}"
                                     )
-                                    self._set_state("connecting", "QR nao carregou. Recarregando WhatsApp Web...")
+                                    self._set_state(
+                                        "connecting", "QR nao carregou. Recarregando WhatsApp Web...")
                                     try:
-                                        page.reload(wait_until="domcontentloaded", timeout=90_000)
-                                        self._apply_stealth_if_enabled(page, stealth_api)
+                                        page.reload(
+                                            wait_until="domcontentloaded", timeout=45_000)
+                                        self._apply_stealth_if_enabled(
+                                            page, stealth_api)
                                     except Exception as exc:
-                                        self._log(f"qr_stuck_reload_failed error={exc}")
+                                        self._log(
+                                            f"qr_stuck_reload_failed error={exc}")
                                     qr_wait_started_at = time.time()
                                     continue
                             else:
@@ -481,13 +507,15 @@ class WhatsAppSessionManager:
                                     last_hint_attempt_at = now
                                     page_hint = self._extract_page_hint(page)
                                 if page_hint:
-                                    self._log(f"page_hint_without_qr hint={page_hint[:200]}")
+                                    self._log(
+                                        f"page_hint_without_qr hint={page_hint[:200]}")
                                     if (
                                         "works with google chrome" in page_hint.lower()
                                         or "browser is not supported" in page_hint.lower()
                                         or "navegador nao e suportado" in page_hint.lower()
                                     ):
-                                        self._log("page_hint_detected_browser_block")
+                                        self._log(
+                                            "page_hint_detected_browser_block")
                                         self._set_error(
                                             "WhatsApp Web bloqueou o navegador neste ambiente da Render. "
                                             "Use um servidor com Chrome dedicado ou outro provedor de envio."
@@ -496,11 +524,14 @@ class WhatsAppSessionManager:
                                     self._set_state(
                                         "waiting_qr",
                                         f"Aguardando QR Code. Tela atual: {page_hint[:150]}",
-                                        qr_code=self._build_status_placeholder_image(page_hint),
+                                        qr_code=self._build_status_placeholder_image(
+                                            page_hint),
                                     )
                                 else:
-                                    self._set_state("connecting", "Carregando WhatsApp Web...")
-                    self._process_send_requests(page, is_connected=is_connected)
+                                    self._set_state(
+                                        "connecting", "Carregando WhatsApp Web...")
+                    self._process_send_requests(
+                        page, is_connected=is_connected)
                     if is_connected:
                         # Sessao conectada: resposta mais rapida para envios enfileirados.
                         time.sleep(0.15)
@@ -544,6 +575,9 @@ class WhatsAppSessionManager:
             "--no-zygote",
             "--use-gl=swiftshader",
             "--ignore-gpu-blocklist",
+            "--disable-gpu",
+            "--disable-gpu-sandbox",
+            "--disable-software-rasterizer",
         ]
         no_sandbox_enabled = (os.getenv("WHATSAPP_PLAYWRIGHT_NO_SANDBOX") or "1").strip().lower() in {
             "1",
@@ -558,6 +592,14 @@ class WhatsAppSessionManager:
                     "--disable-setuid-sandbox",
                 ]
             )
+        single_process_enabled = (os.getenv("WHATSAPP_PLAYWRIGHT_SINGLE_PROCESS") or "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if single_process_enabled:
+            launch_args.append("--single-process")
         common_kwargs = {
             "user_data_dir": str(self._profile_dir),
             "headless": True,
@@ -574,7 +616,8 @@ class WhatsAppSessionManager:
             self._log("launch_context_try channel=explicit_executable")
             return playwright.chromium.launch_persistent_context(**common_kwargs)
 
-        use_chrome_channel_env = (os.getenv("WHATSAPP_PLAYWRIGHT_USE_CHROME_CHANNEL") or "").strip().lower()
+        use_chrome_channel_env = (
+            os.getenv("WHATSAPP_PLAYWRIGHT_USE_CHROME_CHANNEL") or "").strip().lower()
         if use_chrome_channel_env in {"0", "false", "no", "off"}:
             use_chrome_channel = False
         elif use_chrome_channel_env in {"1", "true", "yes", "on"}:
@@ -591,7 +634,8 @@ class WhatsAppSessionManager:
                     **common_kwargs,
                 )
             except Exception:
-                self._log("launch_context_channel_chrome_failed fallback=playwright_chromium")
+                self._log(
+                    "launch_context_channel_chrome_failed fallback=playwright_chromium")
                 pass
 
         self._log("launch_context_try channel=playwright_chromium")
@@ -603,7 +647,8 @@ class WhatsAppSessionManager:
         except Exception as exc:
             message = str(exc or "")
             if "Executable doesn't exist" in message and not self._auto_install_chromium:
-                self._log("launch_context_missing_executable retry=install_chromium")
+                self._log(
+                    "launch_context_missing_executable retry=install_chromium")
                 if self._install_chromium_if_needed():
                     self._cached_chromium_executable_path = None
                     return self._launch_compatible_context(playwright)
@@ -626,23 +671,27 @@ class WhatsAppSessionManager:
             try:
                 stealth_sync(page)
                 self._stealth_applied_page_ids.add(page_identifier)
-                self._log("playwright_stealth_applied strategy=stealth_sync(page)")
+                self._log(
+                    "playwright_stealth_applied strategy=stealth_sync(page)")
                 return
             except TypeError as exc:
                 last_error = exc
                 # Compatibilidade com versões onde `stealth_sync` age como construtor.
                 try:
                     stealth_obj = stealth_sync()
-                    apply_sync = getattr(stealth_obj, "apply_stealth_sync", None)
+                    apply_sync = getattr(
+                        stealth_obj, "apply_stealth_sync", None)
                     if callable(apply_sync):
                         apply_sync(page)
                         self._stealth_applied_page_ids.add(page_identifier)
-                        self._log("playwright_stealth_applied strategy=stealth_sync().apply_stealth_sync(page)")
+                        self._log(
+                            "playwright_stealth_applied strategy=stealth_sync().apply_stealth_sync(page)")
                         return
                     if callable(stealth_obj):
                         stealth_obj(page)
                         self._stealth_applied_page_ids.add(page_identifier)
-                        self._log("playwright_stealth_applied strategy=stealth_sync()(page)")
+                        self._log(
+                            "playwright_stealth_applied strategy=stealth_sync()(page)")
                         return
                 except Exception as inner_exc:
                     last_error = inner_exc
@@ -657,19 +706,23 @@ class WhatsAppSessionManager:
                 if callable(apply_sync):
                     apply_sync(page)
                     self._stealth_applied_page_ids.add(page_identifier)
-                    self._log("playwright_stealth_applied strategy=Stealth().apply_stealth_sync(page)")
+                    self._log(
+                        "playwright_stealth_applied strategy=Stealth().apply_stealth_sync(page)")
                     return
                 if callable(stealth_obj):
                     stealth_obj(page)
                     self._stealth_applied_page_ids.add(page_identifier)
-                    self._log("playwright_stealth_applied strategy=Stealth()(page)")
+                    self._log(
+                        "playwright_stealth_applied strategy=Stealth()(page)")
                     return
-                raise RuntimeError("Stealth sem metodo de aplicacao sincronizado.")
+                raise RuntimeError(
+                    "Stealth sem metodo de aplicacao sincronizado.")
             except Exception as exc:
                 last_error = exc
 
         if last_error is None:
-            self._log("playwright_stealth_apply_failed error=API_stealth_indisponivel")
+            self._log(
+                "playwright_stealth_apply_failed error=API_stealth_indisponivel")
         else:
             self._log(f"playwright_stealth_apply_failed error={last_error}")
 
@@ -677,7 +730,8 @@ class WhatsAppSessionManager:
         if self._cached_chromium_executable_path:
             return self._cached_chromium_executable_path
 
-        explicit_path = (os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH") or "").strip()
+        explicit_path = (
+            os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH") or "").strip()
         if explicit_path:
             explicit_file = Path(explicit_path)
             self._log(
@@ -689,7 +743,8 @@ class WhatsAppSessionManager:
                 return self._cached_chromium_executable_path
 
         candidate_base_dirs: list[Path] = []
-        configured_browsers_path = (os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
+        configured_browsers_path = (
+            os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
         if configured_browsers_path:
             candidate_base_dirs.append(Path(configured_browsers_path))
         candidate_base_dirs.extend(
@@ -715,7 +770,8 @@ class WhatsAppSessionManager:
             try:
                 if not base_dir.exists():
                     continue
-                found_executables.extend(base_dir.glob("chromium-*/chrome-linux/chrome"))
+                found_executables.extend(base_dir.glob(
+                    "chromium-*/chrome-linux/chrome"))
             except Exception:
                 continue
 
@@ -828,7 +884,8 @@ class WhatsAppSessionManager:
                     continue
                 target = locator.first
                 if selector.startswith("span[") or selector.startswith("[data-icon="):
-                    button_ancestor = target.locator("xpath=ancestor::*[@role='button' or self::button][1]")
+                    button_ancestor = target.locator(
+                        "xpath=ancestor::*[@role='button' or self::button][1]")
                     if button_ancestor.count() > 0:
                         target = button_ancestor.first
                 if not target.is_visible():
@@ -862,7 +919,8 @@ class WhatsAppSessionManager:
         if include_generic:
             qr_selectors.extend(["canvas", "img"])
         for selector in qr_selectors:
-            data_url = WhatsAppSessionManager._capture_element_as_data_url(page, selector)
+            data_url = WhatsAppSessionManager._capture_element_as_data_url(
+                page, selector)
             if data_url:
                 return data_url
 
@@ -874,12 +932,14 @@ class WhatsAppSessionManager:
                 "div[role='img']",
             )
             for selector in container_selectors:
-                data_url = WhatsAppSessionManager._capture_element_as_data_url(page, selector)
+                data_url = WhatsAppSessionManager._capture_element_as_data_url(
+                    page, selector)
                 if data_url:
                     return data_url
 
         # 3) Fallback robusto: varrer todos os canvas/img visiveis e escolher o melhor candidato.
-        best_candidate = WhatsAppSessionManager._capture_best_qr_candidate_data_url(page)
+        best_candidate = WhatsAppSessionManager._capture_best_qr_candidate_data_url(
+            page)
         if best_candidate:
             return best_candidate
 
@@ -936,13 +996,15 @@ class WhatsAppSessionManager:
 
                 # Em canvas, tentar extrair o pixel data direto do elemento.
                 try:
-                    tag_name = element.evaluate("el => (el.tagName || '').toLowerCase()")
+                    tag_name = element.evaluate(
+                        "el => (el.tagName || '').toLowerCase()")
                 except Exception:
                     tag_name = ""
 
                 if tag_name == "canvas":
                     try:
-                        canvas_data_url = element.evaluate("el => el.toDataURL('image/png')")
+                        canvas_data_url = element.evaluate(
+                            "el => el.toDataURL('image/png')")
                     except Exception:
                         canvas_data_url = None
                     if isinstance(canvas_data_url, str) and canvas_data_url.startswith("data:image/png;base64,"):
@@ -1111,14 +1173,16 @@ class WhatsAppSessionManager:
             "browser is not supported",
         )
         try:
-            body_text = page.locator("body").inner_text(timeout=2_000).strip().lower()
+            body_text = page.locator("body").inner_text(
+                timeout=2_000).strip().lower()
         except Exception:
             return False
         return any(marker in body_text for marker in markers)
 
     def send_message_with_connected_session(self, phone: str, message: str) -> tuple[bool, str | None]:
         with self._lock:
-            status = str(self._state.get("status") or "disconnected").strip().lower()
+            status = str(self._state.get("status")
+                         or "disconnected").strip().lower()
 
         if status != "connected":
             return False, "Sessao Playwright nao esta conectada ao WhatsApp."
@@ -1156,7 +1220,8 @@ class WhatsAppSessionManager:
 
             try:
                 if not is_connected:
-                    request_payload["result"] = (False, "Sessao Playwright desconectada durante o envio.")
+                    request_payload["result"] = (
+                        False, "Sessao Playwright desconectada durante o envio.")
                 else:
                     self._apply_send_pacing()
                     request_payload["result"] = self._send_message_in_context(
@@ -1164,7 +1229,8 @@ class WhatsAppSessionManager:
                         request_payload.get("phone", ""),
                         request_payload.get("message", ""),
                     )
-                    sent_ok = bool(request_payload["result"][0]) if isinstance(request_payload.get("result"), tuple) else False
+                    sent_ok = bool(request_payload["result"][0]) if isinstance(
+                        request_payload.get("result"), tuple) else False
                     if sent_ok:
                         self._sent_messages_count += 1
                         self._last_send_completed_at = time.time()
@@ -1181,7 +1247,8 @@ class WhatsAppSessionManager:
                 self._send_min_interval_seconds,
                 self._send_max_interval_seconds,
             )
-            wait_seconds = (self._last_send_completed_at + target_interval) - time.time()
+            wait_seconds = (self._last_send_completed_at +
+                            target_interval) - time.time()
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
 
@@ -1208,8 +1275,10 @@ class WhatsAppSessionManager:
     def _send_message_in_context(self, page, phone: str, message: str) -> tuple[bool, str | None]:
         try:
             target_url = f"https://web.whatsapp.com/send?phone={phone}&text={quote(message)}"
-            self._log(f"send_message_start phone={phone} target_url={target_url[:220]}")
-            page.goto(target_url, wait_until="domcontentloaded", timeout=120_000)
+            self._log(
+                f"send_message_start phone={phone} target_url={target_url[:220]}")
+            page.goto(target_url, wait_until="domcontentloaded",
+                      timeout=120_000)
 
             if self._is_browser_rejected(page):
                 return False, "WhatsApp Web rejeitou o navegador automatizado."
@@ -1245,7 +1314,8 @@ class WhatsAppSessionManager:
         if self._last_state_log == signature:
             return
         self._last_state_log = signature
-        self._log(f"state_update status={status} has_qr={has_qr} message={message}")
+        self._log(
+            f"state_update status={status} has_qr={has_qr} message={message}")
 
     def _wait_until_chat_ready(self, page, timeout_seconds: int = 35) -> bool:
         deadline = time.time() + max(timeout_seconds, 5)
