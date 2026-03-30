@@ -265,7 +265,7 @@ class WhatsAppSessionManager:
 
         stealth_sync = None
         try:
-            from playwright_stealth import stealth_sync as Stealth
+            from playwright_stealth import Stealth
             stealth_sync = Stealth
             self._log("playwright_stealth_imported")
         except Exception as exc:
