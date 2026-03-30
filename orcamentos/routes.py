@@ -1,6 +1,7 @@
 ﻿from datetime import timedelta
 from functools import wraps
 from pathlib import Path
+from urllib.parse import unquote_to_bytes
 import re
 import secrets
 import shutil
@@ -573,6 +574,52 @@ def _get_whatsapp_manager() -> WhatsAppSessionManager:
     )
     managers[manager_key] = manager
     return manager
+
+
+def _state_with_qr_url(state: dict[str, object]) -> dict[str, object]:
+    payload = dict(state or {})
+    raw_qr_code = payload.get("qr_code")
+    has_qr_code = isinstance(raw_qr_code, str) and bool(raw_qr_code.strip())
+    payload["has_qr_code"] = has_qr_code
+
+    if has_qr_code:
+        updated_at = payload.get("updated_at")
+        try:
+            version = int(float(updated_at))
+        except (TypeError, ValueError):
+            version = int(server_now().timestamp())
+        payload["qr_code_url"] = url_for("main.whatsapp_qr_code_image", v=version)
+    else:
+        payload["qr_code_url"] = None
+
+    # Evita enviar data URL grande no polling do status.
+    payload.pop("qr_code", None)
+    return payload
+
+
+def _response_from_data_url(data_url: str) -> Response | None:
+    if not isinstance(data_url, str) or not data_url.startswith("data:"):
+        return None
+    if "," not in data_url:
+        return None
+
+    meta_part, data_part = data_url.split(",", 1)
+    media_meta = meta_part[5:]
+    media_segments = [segment.strip() for segment in media_meta.split(";") if segment.strip()]
+    media_type = media_segments[0] if media_segments else "application/octet-stream"
+    is_base64 = any(segment.lower() == "base64" for segment in media_segments[1:])
+
+    try:
+        if is_base64:
+            payload = base64.b64decode(data_part.encode("ascii"), validate=False)
+        else:
+            payload = unquote_to_bytes(data_part)
+    except Exception:
+        return None
+
+    if "/" not in media_type:
+        media_type = "application/octet-stream"
+    return Response(payload, mimetype=media_type)
 
 
 def _ensure_pywhatkit_session_ready() -> tuple[bool, str | None]:
@@ -2039,7 +2086,7 @@ def start_whatsapp_session():
         return jsonify({"error": "plano_nao_permite", "message": "Seu plano atual nao permite integracao com WhatsApp."}), 403
     manager = _get_whatsapp_manager()
     manager.start()
-    return jsonify(manager.get_state())
+    return jsonify(_state_with_qr_url(manager.get_state()))
 
 
 @bp.post("/configuracoes/whatsapp/parar")
@@ -2050,7 +2097,7 @@ def stop_whatsapp_session():
         return jsonify({"error": "plano_nao_permite", "message": "Seu plano atual nao permite integracao com WhatsApp."}), 403
     manager = _get_whatsapp_manager()
     manager.stop()
-    return jsonify(manager.get_state())
+    return jsonify(_state_with_qr_url(manager.get_state()))
 
 
 @bp.get("/configuracoes/whatsapp/status")
@@ -2060,7 +2107,29 @@ def whatsapp_status():
     if not _member_has_feature(user, "can_whatsapp_session"):
         return jsonify({"error": "plano_nao_permite", "message": "Seu plano atual nao permite integracao com WhatsApp."}), 403
     manager = _get_whatsapp_manager()
-    return jsonify(manager.get_state())
+    response = jsonify(_state_with_qr_url(manager.get_state()))
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
+@bp.get("/configuracoes/whatsapp/qrcode")
+@api_subscription_required
+def whatsapp_qr_code_image():
+    user = g.member_user
+    if not _member_has_feature(user, "can_whatsapp_session"):
+        return jsonify({"error": "plano_nao_permite", "message": "Seu plano atual nao permite integracao com WhatsApp."}), 403
+
+    manager = _get_whatsapp_manager()
+    state = manager.get_state()
+    qr_code = state.get("qr_code")
+    if not isinstance(qr_code, str) or not qr_code.strip():
+        return Response(status=404)
+
+    response = _response_from_data_url(qr_code)
+    if response is None:
+        return Response(status=415)
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
 
 
 @bp.route("/fornecedores")
