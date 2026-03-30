@@ -577,7 +577,6 @@ class WhatsAppSessionManager:
             "--ignore-gpu-blocklist",
             "--disable-gpu",
             "--disable-gpu-sandbox",
-            "--disable-software-rasterizer",
         ]
         no_sandbox_enabled = (os.getenv("WHATSAPP_PLAYWRIGHT_NO_SANDBOX") or "1").strip().lower() in {
             "1",
