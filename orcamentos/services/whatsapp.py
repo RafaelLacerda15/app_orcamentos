@@ -22,6 +22,24 @@ WHATSAPP_MODERN_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/133.0.0.0 Safari/537.36"
 )
+QR_REFRESH_CANDIDATE_SELECTORS = (
+    "button[aria-label*='Atualizar']",
+    "button[aria-label*='Recarregar']",
+    "button[aria-label*='Refresh']",
+    "div[role='button'][aria-label*='Atualizar']",
+    "div[role='button'][aria-label*='Recarregar']",
+    "div[role='button'][aria-label*='Refresh']",
+    "button:has(span[data-icon='refresh-large'])",
+    "button:has(span[data-icon='refresh'])",
+    "span[data-icon='refresh-large']",
+    "span[data-icon='refresh']",
+    "[data-icon='refresh-large']",
+    "[data-icon='refresh']",
+    "button:has-text('Atualizar')",
+    "button:has-text('Refresh')",
+    "div[role='button']:has-text('Atualizar')",
+    "div[role='button']:has-text('Refresh')",
+)
 
 
 class WhatsAppSessionManager:
@@ -401,6 +419,7 @@ class WhatsAppSessionManager:
                                 if qr_wait_started_at is None:
                                     qr_wait_started_at = now
                                     self._log("qr_wait_detected_without_code")
+                                    self._log_refresh_qr_selector_snapshot(page)
 
                                 qr_wait_elapsed = now - qr_wait_started_at
                                 if (
@@ -515,9 +534,9 @@ class WhatsAppSessionManager:
             "--disable-blink-features=AutomationControlled",
             "--no-default-browser-check",
             "--no-first-run",
-            "--disable-gpu",
-            "--disable-software-rasterizer",
             "--no-zygote",
+            "--use-gl=swiftshader",
+            "--ignore-gpu-blocklist",
         ]
         no_sandbox_enabled = (os.getenv("WHATSAPP_PLAYWRIGHT_NO_SANDBOX") or "1").strip().lower() in {
             "1",
@@ -771,27 +790,31 @@ class WhatsAppSessionManager:
                 continue
         return False
 
-    @staticmethod
-    def _try_click_refresh_qr(page) -> bool:
-        selectors = (
-            "button[aria-label*='Atualizar']",
-            "button[aria-label*='Recarregar']",
-            "button[aria-label*='Refresh']",
-            "div[role='button'][aria-label*='Atualizar']",
-            "div[role='button'][aria-label*='Recarregar']",
-            "div[role='button'][aria-label*='Refresh']",
-            "button:has(span[data-icon='refresh-large'])",
-            "button:has(span[data-icon='refresh'])",
-            "span[data-icon='refresh-large']",
-            "span[data-icon='refresh']",
-            "[data-icon='refresh-large']",
-            "[data-icon='refresh']",
-            "button:has-text('Atualizar')",
-            "button:has-text('Refresh')",
-            "div[role='button']:has-text('Atualizar')",
-            "div[role='button']:has-text('Refresh')",
-        )
-        for selector in selectors:
+    def _log_refresh_qr_selector_snapshot(self, page) -> None:
+        matches: list[str] = []
+        for selector in QR_REFRESH_CANDIDATE_SELECTORS:
+            try:
+                locator = page.locator(selector)
+                count = locator.count()
+                if count <= 0:
+                    continue
+                visible = False
+                try:
+                    visible = locator.first.is_visible()
+                except Exception:
+                    pass
+                matches.append(f"{selector} count={count} visible={visible}")
+            except Exception:
+                continue
+
+        if matches:
+            preview = " | ".join(matches[:6])
+            self._log(f"qr_refresh_selector_snapshot matches={preview}")
+        else:
+            self._log("qr_refresh_selector_snapshot matches=none")
+
+    def _try_click_refresh_qr(self, page) -> bool:
+        for selector in QR_REFRESH_CANDIDATE_SELECTORS:
             try:
                 locator = page.locator(selector)
                 if locator.count() == 0:
@@ -807,6 +830,7 @@ class WhatsAppSessionManager:
                 return True
             except Exception:
                 continue
+        self._log("qr_refresh_click_not_found")
         return False
 
     @staticmethod
