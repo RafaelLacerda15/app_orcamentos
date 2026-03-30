@@ -48,6 +48,13 @@ class WhatsAppSessionManager:
             "yes",
             "on",
         }
+        self._stealth_enabled = (os.getenv("WHATSAPP_PLAYWRIGHT_STEALTH_ENABLED") or "1").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        self._user_agent = WHATSAPP_MODERN_USER_AGENT
         self._auto_install_chromium = (os.getenv("WHATSAPP_PLAYWRIGHT_AUTO_INSTALL_CHROMIUM") or "0").strip().lower() in {
             "1",
             "true",
@@ -82,7 +89,8 @@ class WhatsAppSessionManager:
             "manager_initialized "
             f"profile_dir={self._profile_dir} "
             f"connect_timeout_seconds={self._connect_timeout_seconds} "
-            f"auto_install_chromium={self._auto_install_chromium}"
+            f"auto_install_chromium={self._auto_install_chromium} "
+            f"stealth_enabled={self._stealth_enabled}"
         )
 
     def start(self) -> None:
@@ -255,6 +263,16 @@ class WhatsAppSessionManager:
             self._set_error("Playwright nao esta instalado. Rode: pip install playwright")
             return
 
+        stealth_sync = None
+        try:
+            from playwright_stealth import stealth_sync as _stealth_sync
+            stealth_sync = _stealth_sync
+            self._log("playwright_stealth_imported")
+        except Exception as exc:
+            self._log(f"playwright_stealth_import_failed error={exc}")
+            if self._stealth_enabled:
+                self._log("playwright_stealth_fallback_disabled")
+
         self._profile_dir.mkdir(parents=True, exist_ok=True)
         browsers_path = (os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
         if not browsers_path and sys.platform.startswith("linux"):
@@ -308,6 +326,7 @@ class WhatsAppSessionManager:
                 )
                 page = self._open_fresh_whatsapp_page(browser_context)
                 self._log("fresh_page_opened")
+                self._apply_stealth_if_enabled(page, stealth_sync)
                 goto_started_at = time.time()
                 page.goto("https://web.whatsapp.com/", wait_until="domcontentloaded", timeout=120_000)
                 self._log(
@@ -410,6 +429,7 @@ class WhatsAppSessionManager:
                                     self._set_state("connecting", "QR nao carregou. Recarregando WhatsApp Web...")
                                     try:
                                         page.reload(wait_until="domcontentloaded", timeout=90_000)
+                                        self._apply_stealth_if_enabled(page, stealth_sync)
                                     except Exception as exc:
                                         self._log(f"qr_stuck_reload_failed error={exc}")
                                     qr_wait_started_at = time.time()
@@ -515,10 +535,11 @@ class WhatsAppSessionManager:
             "user_data_dir": str(self._profile_dir),
             "headless": True,
             "args": launch_args,
-            "user_agent": WHATSAPP_MODERN_USER_AGENT,
+            "user_agent": self._user_agent,
             "locale": "pt-BR",
             "timeout": 45_000,
         }
+        self._log(f"launch_context_user_agent ua={self._user_agent[:140]}")
         executable_path = self._resolve_chromium_executable_path()
         if executable_path:
             common_kwargs["executable_path"] = executable_path
@@ -560,6 +581,17 @@ class WhatsAppSessionManager:
                     self._cached_chromium_executable_path = None
                     return self._launch_compatible_context(playwright)
             raise
+
+    def _apply_stealth_if_enabled(self, page, stealth_sync) -> None:
+        if not self._stealth_enabled:
+            return
+        if stealth_sync is None:
+            return
+        try:
+            stealth_sync(page)
+            self._log("playwright_stealth_applied")
+        except Exception as exc:
+            self._log(f"playwright_stealth_apply_failed error={exc}")
 
     def _resolve_chromium_executable_path(self) -> str | None:
         if self._cached_chromium_executable_path:

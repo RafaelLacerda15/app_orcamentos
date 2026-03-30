@@ -19,6 +19,8 @@ services:
         value: "0"
       - key: WHATSAPP_PLAYWRIGHT_AUTO_INSTALL_CHROMIUM
         value: "0"
+      - key: WHATSAPP_PLAYWRIGHT_STEALTH_ENABLED
+        value: "1"
       - key: WHATSAPP_DEBUG_LOGS
         value: "1"
       - key: DATABASE_URL
