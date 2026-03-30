@@ -84,6 +84,7 @@
     const qrPreviewImage = document.getElementById("qr-preview-image");
     const qrPreviewClose = document.getElementById("qr-preview-close");
     const startIdleLabel = "Iniciar login WhatsApp";
+    let lastQrSource = "";
 
     const sessionStatusMap = {
       connected: { label: "Conectado", className: "status-connected" },
@@ -127,12 +128,16 @@
       syncStartButtonByState(normalized);
 
       if (qrSource) {
-        qrImageEl.src = qrSource;
+        if (qrSource !== lastQrSource) {
+          qrImageEl.src = qrSource;
+          lastQrSource = qrSource;
+        }
         qrImageEl.title = "Clique para ampliar";
         qrImageEl.hidden = false;
         qrEmptyEl.hidden = true;
       } else {
         qrImageEl.removeAttribute("src");
+        lastQrSource = "";
         qrImageEl.removeAttribute("title");
         qrImageEl.hidden = true;
         qrEmptyEl.hidden = false;

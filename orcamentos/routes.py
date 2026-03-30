@@ -585,9 +585,9 @@ def _state_with_qr_url(state: dict[str, object]) -> dict[str, object]:
     if has_qr_code:
         updated_at = payload.get("updated_at")
         try:
-            version = int(float(updated_at))
+            version = int(float(updated_at) * 1000)
         except (TypeError, ValueError):
-            version = int(server_now().timestamp())
+            version = int(server_now().timestamp() * 1000)
         payload["qr_code_url"] = url_for("main.whatsapp_qr_code_image", v=version)
     else:
         payload["qr_code_url"] = None
@@ -2109,6 +2109,8 @@ def whatsapp_status():
     manager = _get_whatsapp_manager()
     response = jsonify(_state_with_qr_url(manager.get_state()))
     response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 
@@ -2129,6 +2131,8 @@ def whatsapp_qr_code_image():
     if response is None:
         return Response(status=415)
     response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
     return response
 
 
